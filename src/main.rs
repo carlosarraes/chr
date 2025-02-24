@@ -5,19 +5,29 @@ use std::process::Command;
 #[derive(Parser)]
 #[command(
     name = "chr",
-    version = "1.0",
-    about = "A simple CLI tool to manage main and homolog braches"
+    version = "0.0.2",
+    about = "A simple CLI tool to manage braches and commits",
+    long_about = "A simple CLI tool to manage branches and commits.\nFor more information, try '--help'."
 )]
 struct Cli {
     #[command(subcommand)]
     command: Commands,
 
-    #[arg(short, long, global = true)]
+    #[arg(
+        short,
+        long,
+        global = true,
+        help = "Enable debug mode for more verbose output. When enabled, the command skips checking for uncommitted changes."
+    )]
     debug: bool,
 }
 
 #[derive(Subcommand)]
 enum Commands {
+    #[command(
+        about = "Start a new card branch.",
+        long_about = "Start a new card branch.\n\nThis command checks the repository status (unless debug mode is enabled), prompts for a card number, and then creates a new branch following the pattern 'ZUP-<card_number>-prd'."
+    )]
     Start,
 }
 
