@@ -12,14 +12,12 @@ use std::process::Command;
 struct Cli {
     #[command(subcommand)]
     command: Commands,
+}
 
-    #[arg(
-        short,
-        long,
-        global = true,
-        help = "Enable debug mode for more verbose output. When enabled, the command skips checking for uncommitted changes."
-    )]
-    debug: bool,
+#[derive(Parser)]
+struct PickArgs {
+    #[arg(short, long, default_value = "5")]
+    count: u32,
 }
 
 #[derive(Subcommand)]
@@ -29,60 +27,93 @@ enum Commands {
         long_about = "Start a new card branch.\n\nThis command checks the repository status (unless debug mode is enabled), prompts for a card number, and then creates a new branch following the pattern 'ZUP-<card_number>-prd'."
     )]
     Start,
+    #[command(
+        about = "Show the last 5 commits from the PRD and HML branches.",
+        long_about = "Show the last 5 commits from the PRD and HML branches.\n\nThis command shows the last 5 commits from the PRD and HML branches of the current card branch."
+    )]
+    Pick(PickArgs),
 }
+
+const PREFIX: &str = "ZUP-";
+const SUFFIX_PRD: &str = "-prd";
+const SUFFIX_HML: &str = "-hml";
 
 fn main() {
     let args = Cli::parse();
-    let mut git = Command::new("git");
 
     match args.command {
-        Commands::Start => {
-            if !args.debug {
-                if !git
-                    .args(["status", "--porcelain"])
-                    .output()
-                    .expect("Failed to execute git status")
-                    .stdout
-                    .is_empty()
-                {
-                    println!(
-                    "You have uncommited changes. Please commit them before starting a new card"
-                );
-                    std::process::exit(1);
-                }
-            }
-
-            let card_number: String = Input::new()
-                .with_prompt("Card number?")
-                .validate_with(|input: &String| -> Result<(), &str> {
-                    input
-                        .parse::<u32>()
-                        .map(|_| ())
-                        .map_err(|_| "Please enter a valid number")
-                })
-                .interact()
-                .unwrap();
-
-            let branch_name = format!("ZUP-{}-prd", card_number);
-
-            git.args(["switch", "main"])
-                .status()
-                .expect("Failed to switch to main branch");
-
-            Command::new("git")
-                .arg("fetch")
-                .status()
-                .expect("Failed to execute git fetch");
-
-            Command::new("git")
-                .arg("pull")
-                .status()
-                .expect("Failed to execute git pull");
-
-            Command::new("git")
-                .args(["switch", "-c", &branch_name])
-                .status()
-                .expect("Failed to create new branch");
-        }
+        Commands::Start => start(),
+        Commands::Pick(pick_args) => pick(pick_args),
     }
+}
+
+fn pick(args: PickArgs) {
+    let mut git = Command::new("git");
+
+    let branch_name = git
+        .arg("branch")
+        .arg("--show-current")
+        .output()
+        .expect("Failed to get current branch name")
+        .stdout;
+
+    let branch_name = String::from_utf8(branch_name).unwrap();
+
+    let branch_name = branch_name.trim();
+
+    let branch_name = branch_name.split("-").collect::<Vec<&str>>();
+
+    let card_number = branch_name[1];
+
+    let hml_branch = format!("{}{}{}", PREFIX, card_number, SUFFIX_HML);
+    let prd_branch = format!("{}{}{}", PREFIX, card_number, SUFFIX_PRD);
+
+    let output = git
+        .arg("log")
+        .arg(format!("^{}", hml_branch))
+        .arg(prd_branch)
+        .arg(args.count.to_string())
+        .arg("--format=%h %C(green)%an%C(reset) %s")
+        .output()
+        .expect("Failed to execute git log");
+
+    let output = String::from_utf8(output.stdout).unwrap();
+
+    println!("{}", output);
+}
+
+fn start() {
+    let mut git = Command::new("git");
+
+    let card_number: String = Input::new()
+        .with_prompt("Card number?")
+        .validate_with(|input: &String| -> Result<(), &str> {
+            input
+                .parse::<u32>()
+                .map(|_| ())
+                .map_err(|_| "Please enter a valid number")
+        })
+        .interact()
+        .unwrap();
+
+    let branch_name = format!("ZUP-{}-prd", card_number);
+
+    git.arg("switch")
+        .arg("main")
+        .status()
+        .expect("Failed to switch to main branch");
+
+    git.arg("fetch")
+        .status()
+        .expect("Failed to execute git fetch");
+
+    git.arg("pull")
+        .status()
+        .expect("Failed to execute git pull");
+
+    git.arg("switch")
+        .arg("-c")
+        .arg(&branch_name)
+        .status()
+        .expect("Failed to create new branch");
 }
