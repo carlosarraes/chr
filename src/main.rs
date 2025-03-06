@@ -1,6 +1,6 @@
 use clap::{Parser, Subcommand};
 use dialoguer::Input;
-use std::process::Command;
+use std::process::{Command, Stdio};
 
 #[derive(Parser)]
 #[command(
@@ -18,8 +18,12 @@ struct Cli {
 struct PickArgs {
     #[arg(short, long, default_value = "5", help = "Number of commits to pick")]
     count: u32,
-    #[arg(short, long, help = "Pick only your commits")]
-    me: bool,
+    #[arg(
+        short,
+        long,
+        help = "Pick latest commits from the current user\n*Rebases might give you already picked commits"
+    )]
+    latest: bool,
     #[arg(short, long, help = "Show commits instead of picking")]
     show: bool,
 }
@@ -78,7 +82,7 @@ fn pick(args: PickArgs) {
 
     let output = String::from_utf8(log_output.stdout).unwrap();
 
-    if args.me {
+    if args.latest {
         let user_output = Command::new("git")
             .arg("config")
             .arg("user.name")
@@ -120,13 +124,16 @@ fn pick(args: PickArgs) {
                     commit_hashes[0],
                     commit_hashes[commit_hashes.len() - 1]
                 ))
+                .stdout(Stdio::piped())
                 .spawn()
                 .expect("Failed to execute git rev-list");
+
+            let rev_stdout = rev_output.stdout.unwrap();
 
             Command::new("git")
                 .arg("cherry-pick")
                 .arg("--stdin")
-                .stdin(rev_output.stdout.unwrap())
+                .stdin(rev_stdout)
                 .status()
                 .expect("Failed to execute git cherry-pick");
         }
