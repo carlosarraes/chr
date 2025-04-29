@@ -62,8 +62,7 @@ fn pick(args: PickArgs) {
         .output()
         .expect("Failed to get current branch name")
         .stdout;
-    let branch_name = String::from_utf8(branch_output).unwrap();
-    let branch_name = branch_name.trim();
+    let branch_name = String::from_utf8(branch_output).unwrap().trim().to_string();
     let parts = branch_name.split("-").collect::<Vec<&str>>();
     let card_number = parts[1];
 
@@ -75,68 +74,89 @@ fn pick(args: PickArgs) {
         .arg(format!("^{}", hml_branch))
         .arg(prd_branch)
         .arg(format!("-{}", args.count))
-        .arg("--format=%h %C(green)%an%C(reset) %s")
-        .arg("--color=always")
+        .arg("--format=%h|%an|%s")
         .output()
         .expect("Failed to execute git log");
-
     let output = String::from_utf8(log_output.stdout).unwrap();
 
-    if args.latest {
-        let user_output = Command::new("git")
-            .arg("config")
-            .arg("user.name")
-            .output()
-            .expect("Failed to get git user name");
-        let username = String::from_utf8(user_output.stdout)
-            .unwrap()
-            .trim()
-            .to_string();
+    let current_user = get_current_user();
 
-        for line in output.lines() {
-            if line.contains(&username) {
-                println!("{}", line);
-            } else {
-                break;
-            }
-        }
+    let final_lines: Vec<&str> = if args.latest {
+        output
+            .lines()
+            .filter(|line| {
+                let parts: Vec<&str> = line.split("|").collect();
+                parts.len() >= 3 && parts[1].trim() == current_user
+            })
+            .collect()
     } else {
-        print!("{}", output);
+        output.lines().collect()
+    };
+
+    for line in &final_lines {
+        let parts: Vec<&str> = line.split("|").collect();
+        if parts.len() < 3 {
+            println!("{}", line);
+        } else {
+            let commit = parts[0].trim();
+            let author = parts[1].trim();
+            let message = parts[2].trim();
+            let colored_author = if author == current_user {
+                format!("\x1b[32m{}\x1b[0m", author)
+            } else {
+                format!("\x1b[31m{}\x1b[0m", author)
+            };
+            println!("{} | {} | {}", commit, colored_author, message);
+        }
     }
 
-    if !args.show {
-        let ques = dialoguer::Confirm::new()
-            .with_prompt("Do you want to cherry-pick these commits?")
-            .interact()
-            .unwrap();
+    let commit_hashes: Vec<&str> = final_lines
+        .iter()
+        .filter_map(|line| {
+            let parts: Vec<&str> = line.split("|").collect();
+            if parts.len() >= 3 {
+                Some(parts[0].trim())
+            } else {
+                None
+            }
+        })
+        .collect();
 
-        if ques {
-            let commit_hashes = output
-                .lines()
-                .map(|line| line.split_whitespace().collect::<Vec<&str>>()[0])
-                .collect::<Vec<&str>>();
-
-            let rev_output = Command::new("git")
-                .arg("rev-list")
-                .arg("--reverse")
-                .arg(format!(
-                    "{}^..{}",
-                    commit_hashes[0],
-                    commit_hashes[commit_hashes.len() - 1]
-                ))
-                .stdout(Stdio::piped())
-                .spawn()
-                .expect("Failed to execute git rev-list");
-
-            let rev_stdout = rev_output.stdout.unwrap();
-
-            Command::new("git")
-                .arg("cherry-pick")
-                .arg("--stdin")
-                .stdin(rev_stdout)
-                .status()
-                .expect("Failed to execute git cherry-pick");
+    if commit_hashes.is_empty() {
+        if args.latest {
+            eprintln!("No commits found for user {}", current_user);
         }
+        return;
+    }
+
+    if args.show {
+        return;
+    }
+
+    let ques = dialoguer::Confirm::new()
+        .with_prompt("Do you want to cherry-pick these commits?")
+        .interact()
+        .unwrap();
+    if ques {
+        let oldest_commit = commit_hashes.last().unwrap();
+        let newest_commit = commit_hashes.first().unwrap();
+        let range = format!("{}^..{}", oldest_commit, newest_commit);
+
+        let rev_output = Command::new("git")
+            .arg("rev-list")
+            .arg("--reverse")
+            .arg(&range)
+            .stdout(Stdio::piped())
+            .spawn()
+            .expect("Failed to execute git rev-list");
+        let rev_stdout = rev_output.stdout.unwrap();
+
+        Command::new("git")
+            .arg("cherry-pick")
+            .arg("--stdin")
+            .stdin(rev_stdout)
+            .status()
+            .expect("Failed to execute git cherry-pick");
     }
 }
 
@@ -174,4 +194,13 @@ fn start() {
         .arg(&branch_name)
         .status()
         .expect("Failed to create new branch");
+}
+
+fn get_current_user() -> String {
+    let output = Command::new("git")
+        .arg("config")
+        .arg("user.name")
+        .output()
+        .expect("Failed to get git user name");
+    String::from_utf8(output.stdout).unwrap().trim().to_string()
 }
