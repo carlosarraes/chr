@@ -69,11 +69,13 @@ fn pick(args: PickArgs) {
     let hml_branch = format!("{}{}{}", PREFIX, card_number, SUFFIX_HML);
     let prd_branch = format!("{}{}{}", PREFIX, card_number, SUFFIX_PRD);
 
+    let commit_count = if args.latest { 100 } else { args.count };
+
     let log_output = Command::new("git")
         .arg("log")
         .arg(format!("^{}", hml_branch))
         .arg(prd_branch)
-        .arg(format!("-{}", args.count))
+        .arg(format!("-{}", commit_count))
         .arg("--format=%h|%an|%s")
         .output()
         .expect("Failed to execute git log");
