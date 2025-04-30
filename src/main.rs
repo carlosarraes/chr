@@ -1,6 +1,9 @@
 use clap::{Parser, Subcommand};
 use dialoguer::Input;
 use std::process::{Command, Stdio};
+use std::fs;
+use std::path::PathBuf;
+use serde::Deserialize;
 
 #[derive(Parser)]
 #[command(
@@ -42,13 +45,41 @@ enum Commands {
     Pick(PickArgs),
 }
 
-const PREFIX: &str = "ZUP-";
-const SUFFIX_PRD: &str = "-prd";
-const SUFFIX_HML: &str = "-hml";
+const DEFAULT_PREFIX: &str = "ZUP-";
+const DEFAULT_SUFFIX_PRD: &str = "-prd";
+const DEFAULT_SUFFIX_HML: &str = "-hml";
+
+#[derive(Deserialize, Debug, Default)]
+struct Config {
+    prefix: Option<String>,
+    suffix_prd: Option<String>,
+    suffix_hml: Option<String>,
+}
+
+fn load_config() -> Config {
+    let config_path = dirs::home_dir()
+        .unwrap_or_default()
+        .join(".config")
+        .join("chr.toml");
+    
+    if config_path.exists() {
+        match fs::read_to_string(&config_path) {
+            Ok(contents) => {
+                match toml::from_str(&contents) {
+                    Ok(config) => return config,
+                    Err(e) => eprintln!("Error parsing config file: {}", e),
+                }
+            },
+            Err(e) => eprintln!("Error reading config file: {}", e),
+        }
+    }
+    
+    Config::default()
+}
 
 fn main() {
     let args = Cli::parse();
-
+    
     match args.command {
         Commands::Start => start(),
         Commands::Pick(pick_args) => pick(pick_args),
@@ -56,6 +87,11 @@ fn main() {
 }
 
 fn pick(args: PickArgs) {
+    let config = load_config();
+    let prefix = config.prefix.as_deref().unwrap_or(DEFAULT_PREFIX);
+    let suffix_prd = config.suffix_prd.as_deref().unwrap_or(DEFAULT_SUFFIX_PRD);
+    let suffix_hml = config.suffix_hml.as_deref().unwrap_or(DEFAULT_SUFFIX_HML);
+
     let branch_output = Command::new("git")
         .arg("branch")
         .arg("--show-current")
@@ -66,8 +102,8 @@ fn pick(args: PickArgs) {
     let parts = branch_name.split("-").collect::<Vec<&str>>();
     let card_number = parts[1];
 
-    let hml_branch = format!("{}{}{}", PREFIX, card_number, SUFFIX_HML);
-    let prd_branch = format!("{}{}{}", PREFIX, card_number, SUFFIX_PRD);
+    let hml_branch = format!("{}{}{}", prefix, card_number, suffix_hml);
+    let prd_branch = format!("{}{}{}", prefix, card_number, suffix_prd);
 
     let commit_count = if args.latest { 100 } else { args.count };
 
@@ -163,6 +199,10 @@ fn pick(args: PickArgs) {
 }
 
 fn start() {
+    let config = load_config();
+    let prefix = config.prefix.as_deref().unwrap_or(DEFAULT_PREFIX);
+    let suffix_prd = config.suffix_prd.as_deref().unwrap_or(DEFAULT_SUFFIX_PRD);
+
     let mut git = Command::new("git");
 
     let card_number: String = Input::new()
@@ -176,7 +216,7 @@ fn start() {
         .interact()
         .unwrap();
 
-    let branch_name = format!("ZUP-{}-prd", card_number);
+    let branch_name = format!("{}{}{}", prefix, card_number, suffix_prd);
 
     git.arg("switch")
         .arg("main")
