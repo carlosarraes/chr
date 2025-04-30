@@ -1,8 +1,6 @@
 use clap::{Parser, Subcommand};
-use dialoguer::Input;
 use std::process::{Command, Stdio};
 use std::fs;
-use std::path::PathBuf;
 use serde::Deserialize;
 
 #[derive(Parser)]
@@ -36,11 +34,6 @@ enum Commands {
     #[command(
         about = "Start a new card branch.",
         long_about = "Start a new card branch.\n\nThis command checks the repository status (unless debug mode is enabled), prompts for a card number, and then creates a new branch following the pattern 'ZUP-<card_number>-prd'."
-    )]
-    Start,
-    #[command(
-        about = "Show the last 5 commits from the PRD and HML branches.",
-        long_about = "Show the last 5 commits from the PRD and HML branches.\n\nThis command shows the last 5 commits from the PRD and HML branches of the current card branch."
     )]
     Pick(PickArgs),
 }
@@ -81,7 +74,6 @@ fn main() {
     let args = Cli::parse();
     
     match args.command {
-        Commands::Start => start(),
         Commands::Pick(pick_args) => pick(pick_args),
     }
 }
@@ -196,46 +188,6 @@ fn pick(args: PickArgs) {
             .status()
             .expect("Failed to execute git cherry-pick");
     }
-}
-
-fn start() {
-    let config = load_config();
-    let prefix = config.prefix.as_deref().unwrap_or(DEFAULT_PREFIX);
-    let suffix_prd = config.suffix_prd.as_deref().unwrap_or(DEFAULT_SUFFIX_PRD);
-
-    let mut git = Command::new("git");
-
-    let card_number: String = Input::new()
-        .with_prompt("Card number?")
-        .validate_with(|input: &String| -> Result<(), &str> {
-            input
-                .parse::<u32>()
-                .map(|_| ())
-                .map_err(|_| "Please enter a valid number")
-        })
-        .interact()
-        .unwrap();
-
-    let branch_name = format!("{}{}{}", prefix, card_number, suffix_prd);
-
-    git.arg("switch")
-        .arg("main")
-        .status()
-        .expect("Failed to switch to main branch");
-
-    git.arg("fetch")
-        .status()
-        .expect("Failed to execute git fetch");
-
-    git.arg("pull")
-        .status()
-        .expect("Failed to execute git pull");
-
-    git.arg("switch")
-        .arg("-c")
-        .arg(&branch_name)
-        .status()
-        .expect("Failed to create new branch");
 }
 
 fn get_current_user() -> String {
