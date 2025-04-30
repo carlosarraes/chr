@@ -5,7 +5,7 @@ use std::process::{Command, Stdio};
 #[derive(Parser)]
 #[command(
     name = "chr",
-    version = "v0.0.2",
+    version = "0.0.2",
     about = "A simple CLI tool to manage braches and commits",
     long_about = "A simple CLI tool to manage branches and commits.\nFor more information, try '--help'."
 )]

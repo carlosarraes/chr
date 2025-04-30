@@ -1,4 +1,4 @@
-name: Build and Release Linux Binary
+name: Build and Release
 permissions:
   contents: write
 
@@ -10,7 +10,29 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    name: Build ${{ matrix.platform.os }}-${{ matrix.platform.arch }}
+    runs-on: ${{ matrix.platform.os-type }}
+    strategy:
+      matrix:
+        platform:
+          - os: linux
+            os-type: ubuntu-latest
+            arch: x86_64
+            target: x86_64-unknown-linux-musl
+          - os: darwin
+            os-type: macos-latest
+            arch: x86_64
+            target: x86_64-apple-darwin
+          # Uncomment these when you are ready to support ARM architectures
+          # - os: linux
+          #   os-type: ubuntu-latest
+          #   arch: aarch64
+          #   target: aarch64-unknown-linux-musl
+          # - os: darwin
+          #   os-type: macos-latest
+          #   arch: aarch64
+          #   target: aarch64-apple-darwin
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
@@ -20,27 +42,52 @@ jobs:
         with:
           toolchain: stable
           override: true
+          target: ${{ matrix.platform.target }}
+
+      - name: Install musl tools (Linux only)
+        if: contains(matrix.platform.target, 'musl')
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y musl-tools
 
       - name: Build release binary
-        run: cargo build --release
+        uses: actions-rs/cargo@v1
+        with:
+          command: build
+          args: --release --target ${{ matrix.platform.target }}
 
-      - name: Create GitHub Release
-        id: create_release
-        uses: actions/create-release@v1
+      - name: Prepare binary
+        shell: bash
+        id: prepare_binary
+        run: |
+          mkdir -p dist
+          cp target/${{ matrix.platform.target }}/release/chr dist/
+          
+          # Set binary name based on OS and architecture
+          BINARY_NAME="chr-${{ matrix.platform.os }}-${{ matrix.platform.arch }}"
+          
+          # Special handling for macOS which is commonly just called "chr"
+          if [ "${{ matrix.platform.os }}" = "darwin" ]; then
+            if [ "${{ matrix.platform.arch }}" = "x86_64" ]; then
+              # For macOS x86_64, provide both a specific and generic binary
+              cp dist/chr "dist/${BINARY_NAME}"
+              echo "asset_paths=dist/chr,dist/${BINARY_NAME}" >> $GITHUB_OUTPUT
+            else
+              # For other macOS architectures
+              cp dist/chr "dist/${BINARY_NAME}"
+              echo "asset_paths=dist/${BINARY_NAME}" >> $GITHUB_OUTPUT
+            fi
+          else
+            # For non-macOS platforms
+            cp dist/chr "dist/${BINARY_NAME}"
+            echo "asset_paths=dist/chr,dist/${BINARY_NAME}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Upload binaries to release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: ${{ steps.prepare_binary.outputs.asset_paths }}
+          fail_on_unmatched_files: true
+          generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          tag_name: ${{ github.ref }}
-          release_name: Release ${{ github.ref }}
-          draft: false
-          prerelease: false
-
-      - name: Upload Release Asset
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./target/release/chr
-          asset_name: chr
-          asset_content_type: application/octet-stream

@@ -4,7 +4,13 @@ A simple CLI tool to manage Git branches and commits.
 
 ## Installation
 
-Soon
+```bash
+curl -sSf https://raw.githubusercontent.com/carlosarraes/chr/main/install.sh | sh
+```
+
+This will download and install the latest release of chr to /usr/local/bin.
+
+Or manually download the latest binary from the [releases page](https://github.com/carlosarraes/chr/releases).
 
 ## Commands
 
