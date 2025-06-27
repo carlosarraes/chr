@@ -17,18 +17,32 @@ A command-line tool for managing Git branch commits and cherry-picking between p
 
 ## Installation
 
+### Quick Install (Recommended)
+
+```bash
+curl -sSf https://raw.githubusercontent.com/carlosarraes/chr/main/install.sh | sh
+```
+
+This will install `chr` to `~/.local/bin`. Make sure this directory is in your PATH.
+
+### Manual Installation
+
+Download the latest binary from the [releases page](https://github.com/carlosarraes/chr/releases) and place it in your PATH.
+
 ### From Source
 
 ```bash
 git clone https://github.com/carlosarraes/chr
 cd chr
-go build -o chr .
-sudo mv chr /usr/local/bin/
+make build
+sudo cp dist/chr /usr/local/bin/
 ```
 
-### Pre-built Binaries
+Or install locally:
 
-Download the latest release from the [releases page](https://github.com/carlosarraes/chr/releases).
+```bash
+make install-local
+```
 
 ## Usage
 
