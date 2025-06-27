@@ -1,0 +1,87 @@
+name: Build and Release
+permissions:
+  contents: write
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build ${{ matrix.platform.os }}-${{ matrix.platform.arch }}
+    runs-on: ${{ matrix.platform.os-type }}
+    strategy:
+      matrix:
+        platform:
+          - os: linux
+            os-type: ubuntu-latest
+            arch: amd64
+            goos: linux
+            goarch: amd64
+          - os: darwin
+            os-type: macos-latest
+            arch: amd64
+            goos: darwin
+            goarch: amd64
+          - os: darwin
+            os-type: macos-latest
+            arch: arm64
+            goos: darwin
+            goarch: arm64
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: '1.21'
+
+      - name: Get version
+        id: version
+        run: |
+          if [[ $GITHUB_REF == refs/tags/* ]]; then
+            VERSION=${GITHUB_REF#refs/tags/}
+          else
+            VERSION=$(git describe --tags --always --dirty)
+          fi
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Build binary
+        env:
+          GOOS: ${{ matrix.platform.goos }}
+          GOARCH: ${{ matrix.platform.goarch }}
+        run: |
+          go build -ldflags "-X main.version=${{ steps.version.outputs.version }}" -o chr .
+
+      - name: Prepare binary
+        shell: bash
+        id: prepare_binary
+        run: |
+          mkdir -p dist
+          
+          # Set binary name based on OS and architecture
+          BINARY_NAME="chr-${{ matrix.platform.os }}-${{ matrix.platform.arch }}"
+          
+          # Copy and rename binary
+          cp chr "dist/${BINARY_NAME}"
+          
+          # For backward compatibility, also provide a generic "chr" binary for Linux x86_64
+          if [ "${{ matrix.platform.os }}" = "linux" ] && [ "${{ matrix.platform.arch }}" = "amd64" ]; then
+            cp chr "dist/chr"
+            echo "asset_paths=dist/chr,dist/${BINARY_NAME}" >> $GITHUB_OUTPUT
+          else
+            echo "asset_paths=dist/${BINARY_NAME}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Upload binaries to release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: ${{ steps.prepare_binary.outputs.asset_paths }}
+          fail_on_unmatched_files: true
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
