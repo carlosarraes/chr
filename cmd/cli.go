@@ -20,6 +20,7 @@ type CLI struct {
 	// Global flags
 	Version   bool `kong:"short='v',help='Show version information'"`
 	NoColor   bool `kong:"help='Disable colored output'"`
+	LLM       bool `kong:"help='Show LLM guide for chr usage'"`
 	
 	// Commands
 	Show   ShowCmd   `kong:"cmd,default='1',help='Show/pick commits (default command)'"`
@@ -253,6 +254,17 @@ func (cli *CLI) BeforeApply(ctx *kong.Context) error {
 		os.Exit(0)
 	}
 	
+	// Handle LLM flag
+	if cli.LLM {
+		// Check if we're in config context for specific config guide
+		if len(os.Args) > 1 && os.Args[1] == "config" {
+			showConfigLLMGuide()
+		} else {
+			showLLMGuide()
+		}
+		os.Exit(0)
+	}
+	
 	return nil
 }
 
@@ -385,4 +397,246 @@ func displayCommit(index int, commit git.Commit, currentUser string, enableColor
 		dateColor.Sprint(commit.Date),
 		messageColor.Sprint(commit.Message),
 	)
+}
+
+// showLLMGuide displays the main LLM guide for chr
+func showLLMGuide() {
+	fmt.Print(`# chr - Git Branch Commit Manager (LLM Guide)
+
+## Overview
+chr is a command-line tool for managing Git branch commits and cherry-picking between production (PRD) and homologation (HML) branches.
+- **Purpose**: Automate cherry-picking commits between production and staging branches
+- **Key Strength**: Rebase-safe commit matching that works even after Git rebases change commit hashes
+- **LLM-Friendly**: Simple, predictable commands with clear dry-run defaults
+
+## Core Problem Solved
+Traditional cherry-picking tools fail after rebases because they rely on Git commit hashes. chr uses "commit signatures" (author + date + message) to identify commits even after rebases.
+
+## Branch Naming Convention
+chr expects this naming pattern:
+- **Production Branch**: ` + "`{prefix}{card-number}{suffix_prd}`" + `
+- **Homologation Branch**: ` + "`{prefix}{card-number}{suffix_hml}`" + `
+
+Default configuration:
+- Prefix: ` + "`ZUP-`" + `
+- Production suffix: ` + "`-prd`" + `
+- Homologation suffix: ` + "`-hml`" + `
+
+Example branches for card 123:
+- Production: ` + "`ZUP-123-prd`" + `
+- Homologation: ` + "`ZUP-123-hml`" + `
+
+## Essential Commands
+
+### Daily Workflow (Most Common)
+` + "```bash" + `
+# Show what commits need to be picked (dry-run - SAFE)
+chr
+
+# Actually cherry-pick the identified commits
+chr --pick
+
+# Show only today's commits that need picking
+chr --today
+
+# Pick all commits from today
+chr --today --pick
+
+# Show commits from yesterday
+chr --yesterday --pick
+` + "```" + `
+
+### Date-Based Filtering
+` + "```bash" + `
+# Show commits since a specific date
+chr --since 2024-01-15
+
+# Show commits until a specific date  
+chr --until 2024-01-31
+
+# Limit number of commits shown
+chr --count 10
+
+# Combine filters
+chr --since 2024-01-15 --count 5 --pick
+` + "```" + `
+
+### Configuration Management
+` + "```bash" + `
+# View current configuration
+chr config
+
+# Set custom branch prefix for different projects
+chr config --set-key prefix --set-value "PROJ-"
+
+# Set custom production suffix
+chr config --set-key suffix_prd --set-value "-production"
+
+# Set custom homologation suffix
+chr config --set-key suffix_hml --set-value "-staging"
+
+# Interactive configuration setup
+chr config --setup
+` + "```" + `
+
+## How chr Works
+1. **Extracts card number** from current branch name
+2. **Constructs PRD/HML branch names** using configuration
+3. **Gets commits** from PRD branch not in HML branch
+4. **Filters by current user** (only shows your commits)
+5. **Applies date filters** if specified
+6. **Uses composite matching** to identify already-picked commits
+7. **Shows or picks** commits based on --pick flag
+
+## Key Features for LLM Understanding
+
+### Rebase-Safe Matching
+chr identifies commits using:
+- Author name
+- Commit date
+- First line of commit message
+
+This means rebased commits are still correctly identified and not duplicated.
+
+### Dry-Run by Default
+- ` + "`chr`" + ` always shows commits first (safe preview)
+- ` + "`chr --pick`" + ` actually performs the cherry-pick
+- This prevents accidental operations
+
+### User Filtering
+- Only shows commits from the current Git user
+- Reduces noise in team environments
+- Uses ` + "`git config user.name`" + ` for identification
+
+### Colored Output
+- Green: Current user commits
+- Red: Other user commits  
+- Different colors for commit types (feat:, fix:, docs:, etc.)
+- Disable with ` + "`--no-color`" + `
+
+## Environment Variables
+` + "```bash" + `
+# Override configuration without editing files
+CHR_PREFIX="ACME-"
+CHR_SUFFIX_PRD="-prod"
+CHR_SUFFIX_HML="-hml"
+CHR_COLOR="false"
+` + "```" + `
+
+## Error Scenarios chr Handles
+- **Invalid branch name**: Current branch doesn't match expected format
+- **Missing branches**: PRD or HML branches don't exist
+- **Not in Git repo**: Current directory isn't a Git repository
+- **No commits found**: No commits match the criteria
+- **Cherry-pick conflicts**: Provides clear guidance on conflict resolution
+
+## Best Practices for LLM Integration
+1. **Always start with dry-run** (` + "`chr`" + `) to preview commits
+2. **Use date filters** for focused operations (` + "`--today`" + `, ` + "`--yesterday`" + `)
+3. **Configure once per project** using ` + "`chr config`" + `
+4. **Combine flags** for precise control (` + "`--since 2024-01-01 --count 5`" + `)
+5. **Check branch names** match expected format before running
+
+## Command Priority for LLM Usage
+1. **Critical**: ` + "`chr`" + ` (dry-run preview), ` + "`chr --pick`" + ` (execute)
+2. **Important**: ` + "`chr --today --pick`" + ` (daily workflow)
+3. **Useful**: ` + "`chr config`" + ` (project setup), date filters
+4. **Advanced**: ` + "`--interactive`" + `, custom date ranges
+
+chr excels at eliminating the manual work of identifying and cherry-picking commits between branches while handling Git rebase scenarios that break traditional tools.
+`)
+}
+
+// showConfigLLMGuide displays the config-specific LLM guide
+func showConfigLLMGuide() {
+	fmt.Print(`# chr config - Configuration Management (LLM Guide)
+
+## Overview
+chr config manages branch naming patterns and tool behavior for different projects and workflows.
+
+## Essential Commands
+` + "```bash" + `
+# View current configuration
+chr config
+
+# Set branch prefix (most common customization)
+chr config --set-key prefix --set-value "ACME-"
+
+# Set production branch suffix
+chr config --set-key suffix_prd --set-value "-production"
+
+# Set homologation branch suffix
+chr config --set-key suffix_hml --set-value "-staging"
+
+# Enable/disable colored output
+chr config --set-key color --set-value false
+
+# Interactive setup (not yet implemented - use --set-key instead)
+chr config --setup
+` + "```" + `
+
+## Configuration Keys
+- **prefix**: Branch name prefix (default: "ZUP-")
+- **suffix_prd**: Production branch suffix (default: "-prd")  
+- **suffix_hml**: Homologation branch suffix (default: "-hml")
+- **color**: Enable colored output (default: true)
+
+## Configuration Sources (Priority Order)
+1. **Command-line flags** (highest priority)
+2. **Environment variables** (CHR_PREFIX, CHR_SUFFIX_PRD, etc.)
+3. **Configuration file** (~/.config/chr.toml)
+4. **Default values** (lowest priority)
+
+## Common Project Setups
+` + "```bash" + `
+# Atlassian/Jira style (default)
+chr config --set-key prefix --set-value "ZUP-"
+chr config --set-key suffix_prd --set-value "-prd"
+chr config --set-key suffix_hml --set-value "-hml"
+# Branches: ZUP-123-prd, ZUP-123-hml
+
+# GitHub style
+chr config --set-key prefix --set-value "feature/"
+chr config --set-key suffix_prd --set-value "-production"  
+chr config --set-key suffix_hml --set-value "-staging"
+# Branches: feature/123-production, feature/123-staging
+
+# Enterprise style
+chr config --set-key prefix --set-value "PROJ-"
+chr config --set-key suffix_prd --set-value "-prod"
+chr config --set-key suffix_hml --set-value "-test"
+# Branches: PROJ-123-prod, PROJ-123-test
+` + "```" + `
+
+## Configuration File Location
+` + "`~/.config/chr.toml`" + `
+
+Example configuration:
+` + "```toml" + `
+# Configuration file for chr tool
+prefix = "ACME-"
+suffix_prd = "-production"
+suffix_hml = "-staging"
+color = true
+` + "```" + `
+
+## Environment Variable Override
+` + "```bash" + `
+# Temporary override without changing config file
+CHR_PREFIX="TEMP-" CHR_SUFFIX_PRD="-live" chr --pick
+
+# Export for session
+export CHR_PREFIX="ACME-"
+export CHR_SUFFIX_PRD="-prod"
+export CHR_SUFFIX_HML="-test"
+export CHR_COLOR="false"
+` + "```" + `
+
+## Validation
+chr validates configuration values:
+- **prefix, suffix_prd, suffix_hml**: Cannot be empty
+- **color**: Must be true or false
+
+Invalid configurations will show clear error messages with suggestions.
+`)
 }
