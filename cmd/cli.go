@@ -250,7 +250,7 @@ func validateDate(dateStr string) error {
 func (cli *CLI) BeforeApply(ctx *kong.Context) error {
 	// Handle version flag
 	if cli.Version {
-		fmt.Println("chr version 0.0.2")
+		fmt.Println("chr version 0.0.3")
 		os.Exit(0)
 	}
 	
