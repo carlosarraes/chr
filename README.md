@@ -254,19 +254,3 @@ chr/
 ## License
 
 MIT License - see LICENSE file for details.
-
-## Changelog
-
-### v0.0.2 (Current)
-
-- Complete Go rewrite with Kong CLI framework
-- Rebase-safe commit matching
-- Configurable branch naming
-- Date-based filtering
-- Colored output
-- Comprehensive test coverage
-
-### v0.0.1
-
-- Initial Rust implementation
-- Basic cherry-pick functionality
