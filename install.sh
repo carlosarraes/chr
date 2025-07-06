@@ -15,9 +15,9 @@ get_arch() {
   # detect architecture
   ARCH=$(uname -m)
   case $ARCH in
-  x86_64) ARCH="amd64" ;;
-  aarch64) ARCH="arm64" ;;
-  arm64) ARCH="arm64" ;;
+  x86_64) ARCH="x86_64" ;;
+  aarch64) ARCH="aarch64" ;;
+  arm64) ARCH="aarch64" ;;
   *)
     echo "Unsupported architecture: $ARCH"
     exit 1
@@ -54,28 +54,24 @@ download_binary() {
   # Ensure cleanup happens even if script fails or exits early
   trap 'rm -rf "$TMP_DIR"' EXIT
 
-  echo "Downloading ${BINARY_NAME} ${VERSION} for ${OS}-${ARCH}..."
+  echo "Downloading ${BINARY_NAME} ${VERSION}..."
 
-  # Try platform-specific binary first, fall back to generic binary for Linux x86_64
-  PLATFORM_BINARY="${BINARY_NAME}-${OS}-${ARCH}"
-  DOWNLOAD_URL="https://github.com/${REPO}/releases/download/${VERSION}/${PLATFORM_BINARY}"
+  # Construct binary name based on OS and architecture
+  BINARY_SUFFIX="${BINARY_NAME}-${OS}-${ARCH}"
   
-  # download the platform-specific binary
+  # Try platform-specific binary first
+  DOWNLOAD_URL="https://github.com/${REPO}/releases/download/${VERSION}/${BINARY_SUFFIX}"
   echo "Downloading from: $DOWNLOAD_URL"
-  if ! curl -fsSL "$DOWNLOAD_URL" -o "${TMP_DIR}/${BINARY_NAME}"; then
-    # If platform-specific binary fails and we're on Linux x86_64, try generic binary
-    if [ "$OS" = "linux" ] && [ "$ARCH" = "amd64" ]; then
-      echo "Platform-specific binary not found, trying generic binary..."
-      DOWNLOAD_URL="https://github.com/${REPO}/releases/download/${VERSION}/${BINARY_NAME}"
-      echo "Downloading from: $DOWNLOAD_URL"
-      curl -fsSL "$DOWNLOAD_URL" -o "${TMP_DIR}/${BINARY_NAME}" || {
-        echo "Download failed. Neither platform-specific nor generic binary found."
-        exit 1
-      }
-    else
-      echo "Download failed. Platform-specific binary not found for ${OS}-${ARCH}."
+  if ! curl -fsSL "$DOWNLOAD_URL" -o "${TMP_DIR}/${BINARY_NAME}" 2>/dev/null; then
+    echo "Platform-specific binary not found, trying generic binary..."
+    # Try generic binary as fallback
+    DOWNLOAD_URL="https://github.com/${REPO}/releases/download/${VERSION}/${BINARY_NAME}"
+    echo "Downloading from: $DOWNLOAD_URL"
+    curl -fsSL "$DOWNLOAD_URL" -o "${TMP_DIR}/${BINARY_NAME}" || {
+      echo "Download failed. Check URL/permissions/network."
+      echo "Available releases: https://github.com/${REPO}/releases"
       exit 1
-    fi
+    }
   fi
 
   # make it executable
@@ -112,4 +108,4 @@ download_binary
 
 echo ""
 echo "Installation complete! Run '${BINARY_NAME} --help' to get started."
-echo "If you encounter 'command not found', ensure '$BIN_DIR' is in your PATH."
+echo "Example usage: ${BINARY_NAME} --today --pick"

@@ -6,6 +6,7 @@ on:
   push:
     tags:
       - 'v*'
+      - '[0-9]*'  # Support tags like 0.0.3
   workflow_dispatch:
 
 jobs:
@@ -17,17 +18,22 @@ jobs:
         platform:
           - os: linux
             os-type: ubuntu-latest
-            arch: amd64
+            arch: x86_64
             goos: linux
             goarch: amd64
           - os: darwin
             os-type: macos-latest
-            arch: amd64
+            arch: x86_64
             goos: darwin
             goarch: amd64
+          - os: linux
+            os-type: ubuntu-latest
+            arch: aarch64
+            goos: linux
+            goarch: arm64
           - os: darwin
             os-type: macos-latest
-            arch: arm64
+            arch: aarch64
             goos: darwin
             goarch: arm64
 
@@ -36,7 +42,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Set up Go
-        uses: actions/setup-go@v4
+        uses: actions/setup-go@v5
         with:
           go-version: '1.21'
 
@@ -50,37 +56,63 @@ jobs:
           fi
           echo "version=$VERSION" >> $GITHUB_OUTPUT
 
-      - name: Build binary
+      - name: Install cross-compilation tools
+        run: |
+          if [ "${{ matrix.platform.os }}" = "linux" ]; then
+            if [ "${{ matrix.platform.arch }}" = "aarch64" ]; then
+              sudo apt-get update
+              sudo apt-get install -y gcc-aarch64-linux-gnu
+            fi
+          fi
+
+      - name: Build release binary
         env:
           GOOS: ${{ matrix.platform.goos }}
           GOARCH: ${{ matrix.platform.goarch }}
+          CGO_ENABLED: 0
+          CC: ${{ matrix.platform.arch == 'aarch64' && matrix.platform.os == 'linux' && 'aarch64-linux-gnu-gcc' || '' }}
         run: |
-          go build -ldflags "-X main.version=${{ steps.version.outputs.version }}" -o chr .
+          go build -ldflags="-w -s -X main.version=${{ steps.version.outputs.version }}" -o chr .
 
       - name: Prepare binary
         shell: bash
-        id: prepare_binary
         run: |
-          mkdir -p dist
-          
           # Set binary name based on OS and architecture
           BINARY_NAME="chr-${{ matrix.platform.os }}-${{ matrix.platform.arch }}"
           
           # Copy and rename binary
-          cp chr "dist/${BINARY_NAME}"
+          cp chr "${BINARY_NAME}"
           
-          # For backward compatibility, also provide a generic "chr" binary for Linux x86_64
-          if [ "${{ matrix.platform.os }}" = "linux" ] && [ "${{ matrix.platform.arch }}" = "amd64" ]; then
-            cp chr "dist/chr"
-            echo "asset_paths=dist/chr,dist/${BINARY_NAME}" >> $GITHUB_OUTPUT
-          else
-            echo "asset_paths=dist/${BINARY_NAME}" >> $GITHUB_OUTPUT
-          fi
+          # For macOS x86_64, we already have "chr" - no need to copy
+          # The artifact upload will pick up both files
 
-      - name: Upload binaries to release
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: chr-${{ matrix.platform.os }}-${{ matrix.platform.arch }}
+          path: chr*
+          retention-days: 1
+
+  release:
+    name: Create Release
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Prepare release assets
+        run: |
+          mkdir -p release-assets
+          find artifacts -name "chr*" -type f -exec cp {} release-assets/ \;
+          ls -la release-assets/
+
+      - name: Create release
         uses: softprops/action-gh-release@v1
         with:
-          files: ${{ steps.prepare_binary.outputs.asset_paths }}
+          files: release-assets/*
           fail_on_unmatched_files: true
           generate_release_notes: true
         env:
