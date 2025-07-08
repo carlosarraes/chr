@@ -9,11 +9,13 @@ A command-line tool for managing Git branch commits and cherry-picking between p
 ## Key Features
 
 - **Rebase-Safe Commit Detection**: Uses composite matching (author + date + message) to identify commits even after rebases change their hashes
-- **Automatic User Filtering**: Only shows commits from the current Git user
+- **User-Friendly CLI**: Clean `chr pick` interface with intuitive flags
+- **Automatic User Filtering**: `--latest` flag filters commits by current Git user
 - **Date-Based Filtering**: Filter commits by today, yesterday, or custom date ranges
-- **Dry-Run Mode**: Preview commits before cherry-picking (default behavior)
+- **Dry-Run Mode**: `--show` flag previews commits before cherry-picking
 - **Colored Output**: Syntax highlighting for different commit types and authors
 - **Configurable Branch Naming**: Support for custom prefixes and suffixes
+- **AI-Friendly Documentation**: `--llm` flag provides comprehensive usage guide for LLMs
 
 ## Installation
 
@@ -49,32 +51,41 @@ make install-local
 ### Basic Usage
 
 ```bash
-# Show commits that need to be picked (dry-run)
-chr
+# Cherry-pick commits (default behavior)
+chr pick
 
-# Actually cherry-pick the commits
-chr --pick
+# Show commits without picking (dry-run)
+chr pick --show
 
-# Show specific number of commits
-chr --count 10
+# Pick latest commits from current user only
+chr pick --latest
 
-# Show commits from today only
-chr --today
+# Show latest commits from current user
+chr pick --latest --show
 
-# Show commits from yesterday
-chr --yesterday
+# Pick specific number of commits
+chr pick --count 10
 
-# Show commits since a specific date
-chr --since 2024-01-01
+# Pick commits from today only
+chr pick --today
 
-# Show commits until a specific date
-chr --until 2024-01-31
+# Pick commits from yesterday
+chr pick --yesterday
+
+# Pick commits since a specific date
+chr pick --since 2024-01-01
+
+# Pick commits until a specific date
+chr pick --until 2024-01-31
 
 # Interactive mode
-chr --interactive
+chr pick --interactive
 
 # Disable colored output
-chr --no-color
+chr pick --no-color
+
+# Show AI-friendly usage guide
+chr --llm
 ```
 
 ### Configuration
@@ -174,13 +185,13 @@ Command-line flags override environment variables, which override the config fil
 
 ```bash
 # Check what commits need to be picked today
-chr --today
+chr pick --today --show
 
 # Pick all your commits from today
-chr --today --pick
+chr pick --today
 
-# Check commits from the last few days
-chr --since 2024-01-20 --count 20
+# Check your latest commits from the last few days
+chr pick --latest --show --since 2024-01-20
 ```
 
 ### After Rebase
@@ -188,7 +199,7 @@ chr --since 2024-01-20 --count 20
 ```bash
 # Even after rebasing, chr will still find your commits
 git rebase main
-chr --pick  # Will correctly identify and pick your rebased commits
+chr pick --latest  # Will correctly identify and pick your rebased commits
 ```
 
 ### Custom Configuration
@@ -201,6 +212,25 @@ chr config --set-key suffix_hml --set-value "-staging"
 
 # Now chr will look for branches like PROJ-123-production and PROJ-123-staging
 ```
+
+## AI-Friendly Documentation
+
+`chr` includes comprehensive AI-friendly documentation accessible via the `--llm` flag:
+
+```bash
+# Show main LLM usage guide
+chr --llm
+
+# Show configuration-specific guide
+chr config --llm
+```
+
+This provides LLMs and AI assistants with:
+- Detailed usage patterns and best practices
+- Common workflow examples
+- Configuration management guidance
+- Error handling scenarios
+- Command priority recommendations
 
 ## Error Handling
 
