@@ -23,14 +23,14 @@ type CLI struct {
 	LLM       bool `kong:"help='Show LLM guide for chr usage'"`
 	
 	// Commands
-	Show   ShowCmd   `kong:"cmd,default='1',help='Show/pick commits (default command)'"`
+	Pick   PickCmd   `kong:"cmd,help='Show and cherry-pick commits'"`
 	Config ConfigCmd `kong:"cmd,help='Manage configuration'"`
 }
 
-// ShowCmd represents the main command for showing/picking commits
-type ShowCmd struct {
-	Count       int    `kong:"short='c',default='5',help='Number of commits to show'"`
-	Pick        bool   `kong:"help='Actually cherry-pick commits (default is dry-run)'"`
+type PickCmd struct {
+	Count       int    `kong:"short='c',default='5',help='Number of commits to pick'"`
+	Latest      bool   `kong:"short='l',help='Pick latest commits from current user (up to 100)'"`
+	Show        bool   `kong:"short='s',help='Show commits instead of picking (dry run)'"`
 	Today       bool   `kong:"help='Show commits from today only'"`
 	Yesterday   bool   `kong:"help='Show commits from yesterday only'"`
 	Since       string `kong:"help='Show commits since date (YYYY-MM-DD)'"`
@@ -45,8 +45,7 @@ type ConfigCmd struct {
 	Interactive bool   `kong:"name='setup',help='Interactive configuration setup'"`
 }
 
-// Run executes the main show command
-func (s *ShowCmd) Run(ctx *kong.Context, globals *CLI) error {
+func (p *PickCmd) Run(ctx *kong.Context, globals *CLI) error {
 	// Load configuration first
 	cfg, err := loadConfig()
 	if err != nil {
@@ -95,8 +94,13 @@ func (s *ShowCmd) Run(ctx *kong.Context, globals *CLI) error {
 		return fmt.Errorf("HML branch '%s' does not exist", hmlBranch)
 	}
 	
+	commitCount := p.Count
+	if p.Latest {
+		commitCount = 100
+	}
+	
 	// Get commits from PRD branch
-	prdCommits, err := git.GetCommits(repoDir, hmlBranch, prdBranch, s.Count)
+	prdCommits, err := git.GetCommits(repoDir, hmlBranch, prdBranch, commitCount)
 	if err != nil {
 		return fmt.Errorf("failed to get PRD commits: %w", err)
 	}
@@ -112,27 +116,31 @@ func (s *ShowCmd) Run(ctx *kong.Context, globals *CLI) error {
 		return fmt.Errorf("failed to get current user: %w", err)
 	}
 	
-	// Filter by current user
-	userCommits := git.FilterCommitsByAuthor(prdCommits, currentUser)
+	var userCommits []git.Commit
+	if p.Latest {
+		userCommits = git.FilterCommitsByAuthor(prdCommits, currentUser)
+	} else {
+		userCommits = prdCommits
+	}
 	
 	// Apply date filtering
 	var filteredCommits []git.Commit
-	if s.Today {
+	if p.Today {
 		filteredCommits = git.FilterCommitsByDate(userCommits, git.NewTodayFilter())
-	} else if s.Yesterday {
+	} else if p.Yesterday {
 		filteredCommits = git.FilterCommitsByDate(userCommits, git.NewYesterdayFilter())
-	} else if s.Since != "" {
-		if err := validateDate(s.Since); err != nil {
+	} else if p.Since != "" {
+		if err := validateDate(p.Since); err != nil {
 			return fmt.Errorf("invalid since date: %w", err)
 		}
-		since, _ := time.Parse("2006-01-02", s.Since)
+		since, _ := time.Parse("2006-01-02", p.Since)
 		filter := &git.DateFilter{Type: git.DateFilterTypeSince, Since: since}
 		filteredCommits = git.FilterCommitsByDate(userCommits, filter)
-	} else if s.Until != "" {
-		if err := validateDate(s.Until); err != nil {
+	} else if p.Until != "" {
+		if err := validateDate(p.Until); err != nil {
 			return fmt.Errorf("invalid until date: %w", err)
 		}
-		until, _ := time.Parse("2006-01-02", s.Until)
+		until, _ := time.Parse("2006-01-02", p.Until)
 		filter := &git.DateFilter{Type: git.DateFilterTypeUntil, Until: until}
 		filteredCommits = git.FilterCommitsByDate(userCommits, filter)
 	} else {
@@ -164,8 +172,8 @@ func (s *ShowCmd) Run(ctx *kong.Context, globals *CLI) error {
 		displayCommit(i+1, commit, currentUser, cfg.Color)
 	}
 	
-	if !s.Pick {
-		fmt.Println("\nDry-run mode. Use --pick to actually cherry-pick these commits.")
+	if p.Show {
+		fmt.Println("\nDry-run mode. Remove --show to actually cherry-pick these commits.")
 		return nil
 	}
 	
@@ -250,7 +258,7 @@ func validateDate(dateStr string) error {
 func (cli *CLI) BeforeApply(ctx *kong.Context) error {
 	// Handle version flag
 	if cli.Version {
-		fmt.Println("chr version 0.0.4")
+		fmt.Println("chr version 0.1.0")
 		os.Exit(0)
 	}
 	
@@ -274,7 +282,7 @@ func ExecuteCLI(args []string) error {
 	
 	parser, err := kong.New(&cli,
 		kong.Name("chr"),
-		kong.Description("A simple CLI tool to manage Git branches and commits"),
+		kong.Description("Git commit manager for cherry-picking between production and homologation branches\n\nUsage: chr pick [flags]  # Cherry-pick commits (default)\n       chr pick --show   # Show commits (dry run)\n       chr config        # Manage configuration"),
 		kong.UsageOnError(),
 		kong.ConfigureHelp(kong.HelpOptions{
 			Compact: true,
