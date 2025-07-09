@@ -39,6 +39,7 @@ type PickCmd struct {
 	Until       string `kong:"help='Show commits until date (YYYY-MM-DD)'"`
 	Interactive bool   `kong:"short='i',help='Interactive commit selection'"`
 	Continue    bool   `kong:"help='Continue cherry-picking after resolving conflicts'"`
+	Debug       bool   `kong:"short='d',help='Show debug output'"`
 }
 
 // ConfigCmd represents the config subcommand
@@ -111,7 +112,7 @@ func (p *PickCmd) Run(ctx *kong.Context, globals *CLI) error {
 	}
 
 	// Get commits from PRD branch
-	prdCommits, err := git.GetCommits(repoDir, hmlBranch, prdBranch, prdCommitLimit)
+	prdCommits, err := git.GetCommits(repoDir, hmlBranch, prdBranch, prdCommitLimit, p.Debug)
 	if err != nil {
 		return fmt.Errorf("failed to get PRD commits: %w", err)
 	}
@@ -159,7 +160,7 @@ func (p *PickCmd) Run(ctx *kong.Context, globals *CLI) error {
 	}
 
 	// Get HML commits for comparison (to find already picked commits)
-	hmlCommits, err := git.GetCommits(repoDir, "main", hmlBranch, 100) // Get more commits for comparison
+	hmlCommits, err := git.GetCommits(repoDir, "main", hmlBranch, 100, p.Debug)
 	if err != nil {
 		return fmt.Errorf("failed to get HML commits: %w", err)
 	}

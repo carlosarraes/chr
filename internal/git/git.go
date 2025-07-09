@@ -83,50 +83,92 @@ func BranchExists(repoDir, branch string) (bool, error) {
 	return true, nil
 }
 
-func FetchBranches(repoDir string, branches ...string) error {
+func FetchBranches(repoDir string, debug bool, branches ...string) error {
 	checkCmd := exec.Command("git", "remote", "get-url", "origin")
 	checkCmd.Dir = repoDir
 	if err := checkCmd.Run(); err != nil {
+		if debug {
+			fmt.Printf("Debug: No origin remote found, skipping fetch\n")
+		}
 		return nil
 	}
 
+	if debug {
+		fmt.Printf("Debug: Fetching from origin...\n")
+	}
 	cmd := exec.Command("git", "fetch", "origin")
 	cmd.Dir = repoDir
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("failed to fetch from origin: %w", err)
 	}
+	if debug {
+		fmt.Printf("Debug: Fetch completed successfully\n")
+	}
 	return nil
 }
 
 // GetCommits gets commits that are in sourceBranch but not in targetBranch
-func GetCommits(repoDir, targetBranch, sourceBranch string, limit int) ([]Commit, error) {
-	if err := FetchBranches(repoDir, targetBranch, sourceBranch); err != nil {
+func GetCommits(repoDir, targetBranch, sourceBranch string, limit int, debug bool) ([]Commit, error) {
+	if err := FetchBranches(repoDir, debug, targetBranch, sourceBranch); err != nil {
 		return nil, fmt.Errorf("failed to fetch branches: %w", err)
 	}
 
 	checkCmd := exec.Command("git", "remote", "get-url", "origin")
 	checkCmd.Dir = repoDir
 	hasOrigin := checkCmd.Run() == nil
+	if debug {
+		fmt.Printf("Debug: hasOrigin=%v\n", hasOrigin)
+	}
 
 	var sourceRef, targetRef string
-	if hasOrigin {
+	if localExists, _ := BranchExists(repoDir, sourceBranch); localExists {
+		sourceRef = sourceBranch
+		if debug {
+			fmt.Printf("Debug: Using local source branch: %s\n", sourceRef)
+		}
+	} else if hasOrigin {
 		sourceRemoteRef := fmt.Sprintf("origin/%s", sourceBranch)
-		targetRemoteRef := fmt.Sprintf("origin/%s", targetBranch)
-		
 		if remoteExists, _ := BranchExists(repoDir, sourceRemoteRef); remoteExists {
 			sourceRef = sourceRemoteRef
+			if debug {
+				fmt.Printf("Debug: Local source branch not found, using remote: %s\n", sourceRef)
+			}
 		} else {
 			sourceRef = sourceBranch
-		}
-		
-		if remoteExists, _ := BranchExists(repoDir, targetRemoteRef); remoteExists {
-			targetRef = targetRemoteRef
-		} else {
-			targetRef = targetBranch
+			if debug {
+				fmt.Printf("Debug: Neither local nor remote source branch found, using: %s\n", sourceRef)
+			}
 		}
 	} else {
 		sourceRef = sourceBranch
+		if debug {
+			fmt.Printf("Debug: No origin remote, using local source branch: %s\n", sourceRef)
+		}
+	}
+	
+	if localExists, _ := BranchExists(repoDir, targetBranch); localExists {
 		targetRef = targetBranch
+		if debug {
+			fmt.Printf("Debug: Using local target branch: %s\n", targetRef)
+		}
+	} else if hasOrigin {
+		targetRemoteRef := fmt.Sprintf("origin/%s", targetBranch)
+		if remoteExists, _ := BranchExists(repoDir, targetRemoteRef); remoteExists {
+			targetRef = targetRemoteRef
+			if debug {
+				fmt.Printf("Debug: Local target branch not found, using remote: %s\n", targetRef)
+			}
+		} else {
+			targetRef = targetBranch
+			if debug {
+				fmt.Printf("Debug: Neither local nor remote target branch found, using: %s\n", targetRef)
+			}
+		}
+	} else {
+		targetRef = targetBranch
+		if debug {
+			fmt.Printf("Debug: No origin remote, using local target branch: %s\n", targetRef)
+		}
 	}
 
 	// Use git log to find commits in sourceBranch that are not in targetBranch
@@ -141,15 +183,26 @@ func GetCommits(repoDir, targetBranch, sourceBranch string, limit int) ([]Commit
 		args = append(args, fmt.Sprintf("-%d", limit))
 	}
 
-	fmt.Printf("Debug: Running git command: git %s\n", strings.Join(args, " "))
-	fmt.Printf("Debug: sourceRef=%s, targetRef=%s\n", sourceRef, targetRef)
+	if debug {
+		fmt.Printf("Debug: Running git command: git %s\n", strings.Join(args, " "))
+		fmt.Printf("Debug: sourceRef=%s, targetRef=%s\n", sourceRef, targetRef)
+	}
 
 	cmd := exec.Command("git", args...)
 	cmd.Dir = repoDir
 
 	output, err := cmd.Output()
 	if err != nil {
+		if debug {
+			if exitError, ok := err.(*exec.ExitError); ok {
+				fmt.Printf("Debug: Git command failed with stderr: %s\n", string(exitError.Stderr))
+			}
+		}
 		return nil, fmt.Errorf("failed to get commits with command 'git %s': %w", strings.Join(args, " "), err)
+	}
+	
+	if debug {
+		fmt.Printf("Debug: Git command succeeded, output length: %d bytes\n", len(output))
 	}
 
 	lines := strings.Split(strings.TrimSpace(string(output)), "\n")

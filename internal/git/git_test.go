@@ -158,7 +158,7 @@ func TestGetCommits(t *testing.T) {
 	createTestCommit(t, repoDir, hmlBranch, "commit 1 in hml")
 
 	// Get commits that are in PRD but not in HML
-	commits, err := GetCommits(repoDir, hmlBranch, prdBranch, 10)
+	commits, err := GetCommits(repoDir, hmlBranch, prdBranch, 10, false)
 	if err != nil {
 		t.Fatalf("GetCommits failed: %v", err)
 	}
@@ -204,7 +204,7 @@ func TestGetCommitsWithLimit(t *testing.T) {
 	createTestCommit(t, repoDir, prdBranch, "commit 5")
 
 	// Get only 2 commits
-	commits, err := GetCommits(repoDir, hmlBranch, prdBranch, 2)
+	commits, err := GetCommits(repoDir, hmlBranch, prdBranch, 2, false)
 	if err != nil {
 		t.Fatalf("GetCommits failed: %v", err)
 	}
