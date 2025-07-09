@@ -21,7 +21,7 @@ func TestExecuteCLI_Help(t *testing.T) {
 func TestExecuteCLI_InvalidArgs(t *testing.T) {
 	args := []string{"--invalid-flag"}
 	err := ExecuteCLI(args)
-	
+
 	if err == nil {
 		t.Error("Expected error for invalid flag")
 	}
@@ -55,18 +55,18 @@ func TestShowCmd_Validation(t *testing.T) {
 			wantErr: true,
 		},
 	}
-	
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			var err error
-			
+
 			if tt.since != "" {
 				err = validateDate(tt.since)
 			}
 			if tt.until != "" {
 				err = validateDate(tt.until)
 			}
-			
+
 			if tt.wantErr && err == nil {
 				t.Error("Expected validation error")
 			}
@@ -89,7 +89,7 @@ func TestValidateConfigKey(t *testing.T) {
 		{"invalid_key", true},
 		{"", true},
 	}
-	
+
 	for _, tt := range tests {
 		t.Run(tt.key, func(t *testing.T) {
 			err := ValidateConfigKey(tt.key)
@@ -117,7 +117,7 @@ func TestValidateConfigValue(t *testing.T) {
 		{"suffix_prd", "-prod", false},
 		{"suffix_prd", "", true},
 	}
-	
+
 	for _, tt := range tests {
 		t.Run(tt.key+"="+tt.value, func(t *testing.T) {
 			err := ValidateConfigValue(tt.key, tt.value)

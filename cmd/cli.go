@@ -10,7 +10,7 @@ import (
 
 	"github.com/alecthomas/kong"
 	"github.com/fatih/color"
-	
+
 	"github.com/carlosarraes/chr/internal/config"
 	"github.com/carlosarraes/chr/internal/git"
 	"github.com/carlosarraes/chr/internal/picker"
@@ -22,7 +22,7 @@ type CLI struct {
 	VersionFlag bool `kong:"short='v',name='version',help='Show version information'"`
 	NoColor     bool `kong:"help='Disable colored output'"`
 	LLM         bool `kong:"help='Show LLM guide for chr usage'"`
-	
+
 	// Commands
 	Pick    PickCmd    `kong:"cmd,help='Show and cherry-pick commits'"`
 	Config  ConfigCmd  `kong:"cmd,help='Manage configuration'"`
@@ -48,87 +48,87 @@ type ConfigCmd struct {
 	Interactive bool   `kong:"name='setup',help='Interactive configuration setup'"`
 }
 
-type VersionCmd struct {}
+type VersionCmd struct{}
 
 func (p *PickCmd) Run(ctx *kong.Context, globals *CLI) error {
 	if p.Continue {
 		return handleContinue()
 	}
-	
+
 	// Load configuration first
 	cfg, err := loadConfig()
 	if err != nil {
 		return fmt.Errorf("failed to load config: %w", err)
 	}
-	
+
 	// Setup colors - global flag overrides config
 	color.NoColor = globals.NoColor || !cfg.Color
-	
+
 	// Get current working directory (Git repo)
 	repoDir, err := os.Getwd()
 	if err != nil {
 		return fmt.Errorf("failed to get current directory: %w", err)
 	}
-	
+
 	// Get current branch
 	currentBranch, err := git.GetCurrentBranch(repoDir)
 	if err != nil {
 		return fmt.Errorf("failed to get current branch: %w", err)
 	}
-	
+
 	// Parse branch name to get card number
 	cardNumber, err := git.ParseBranchName(currentBranch, cfg.Prefix)
 	if err != nil {
 		return fmt.Errorf("failed to parse branch name: %w", err)
 	}
-	
+
 	// Construct PRD and HML branch names
 	prdBranch := cfg.Prefix + cardNumber + cfg.SuffixPrd
 	hmlBranch := cfg.Prefix + cardNumber + cfg.SuffixHml
-	
+
 	fmt.Printf("Current branch: %s\n", currentBranch)
 	fmt.Printf("PRD branch: %s\n", prdBranch)
 	fmt.Printf("HML branch: %s\n", hmlBranch)
-	
+
 	// Check if branches exist
 	if exists, err := git.BranchExists(repoDir, prdBranch); err != nil {
 		return fmt.Errorf("failed to check PRD branch: %w", err)
 	} else if !exists {
 		return fmt.Errorf("PRD branch '%s' does not exist", prdBranch)
 	}
-	
+
 	if exists, err := git.BranchExists(repoDir, hmlBranch); err != nil {
 		return fmt.Errorf("failed to check HML branch: %w", err)
 	} else if !exists {
 		return fmt.Errorf("HML branch '%s' does not exist", hmlBranch)
 	}
-	
+
 	prdCommitLimit := 100
 	if p.Latest {
 		prdCommitLimit = 20
 	} else if p.Show {
 		prdCommitLimit = 0
 	}
-	
+
 	// Get commits from PRD branch
 	prdCommits, err := git.GetCommits(repoDir, hmlBranch, prdBranch, prdCommitLimit)
 	if err != nil {
 		return fmt.Errorf("failed to get PRD commits: %w", err)
 	}
-	
+
 	if len(prdCommits) == 0 {
 		fmt.Println("No new commits found in PRD branch.")
 		return nil
 	}
-	
+
 	// Get current user for filtering
 	currentUser, err := git.GetCurrentUser(repoDir)
 	if err != nil {
 		return fmt.Errorf("failed to get current user: %w", err)
 	}
-	
+
 	userCommits := git.FilterCommitsByAuthor(prdCommits, currentUser)
-	
+
 	// Apply date filtering
 	var filteredCommits []git.Commit
 	if p.Today {
@@ -152,26 +152,26 @@ func (p *PickCmd) Run(ctx *kong.Context, globals *CLI) error {
 	} else {
 		filteredCommits = userCommits
 	}
-	
+
 	if len(filteredCommits) == 0 {
 		fmt.Println("No commits found for the current user with the specified filters.")
 		return nil
 	}
-	
+
 	// Get HML commits for comparison (to find already picked commits)
 	hmlCommits, err := git.GetCommits(repoDir, "main", hmlBranch, 100) // Get more commits for comparison
 	if err != nil {
 		return fmt.Errorf("failed to get HML commits: %w", err)
 	}
-	
+
 	// Find commits that haven't been picked yet
 	unpickedCommits := picker.FilterUnpickedCommits(filteredCommits, hmlCommits)
-	
+
 	if len(unpickedCommits) == 0 {
 		fmt.Println("All commits have already been picked to HML branch.")
 		return nil
 	}
-	
+
 	if !p.Show {
 		if !p.Latest && p.Count != 5 {
 			if len(unpickedCommits) > p.Count {
@@ -189,31 +189,31 @@ func (p *PickCmd) Run(ctx *kong.Context, globals *CLI) error {
 			}
 		}
 	}
-	
+
 	// Display commits
 	fmt.Printf("\nFound %d unpicked commits:\n", len(unpickedCommits))
 	for i, commit := range unpickedCommits {
 		displayCommit(i+1, commit, currentUser, cfg.Color)
 	}
-	
+
 	if p.Show {
 		fmt.Println("\nDry-run mode. Remove --show to actually cherry-pick these commits.")
 		return nil
 	}
-	
+
 	// Cherry-pick mode
-	
+
 	// Extract commit hashes
 	var commitHashes []string
 	for _, commit := range unpickedCommits {
 		commitHashes = append(commitHashes, commit.Hash)
 	}
-	
+
 	// Perform cherry-pick
 	if err := git.CherryPickCommits(repoDir, commitHashes); err != nil {
 		return fmt.Errorf("cherry-pick failed: %w", err)
 	}
-	
+
 	fmt.Println("Successfully cherry-picked all commits!")
 	return nil
 }
@@ -221,7 +221,7 @@ func (p *PickCmd) Run(ctx *kong.Context, globals *CLI) error {
 // Run executes the config command
 func (c *ConfigCmd) Run(ctx *kong.Context, globals *CLI) error {
 	color.NoColor = globals.NoColor
-	
+
 	// Check if both key and value are provided for setting
 	if c.SetKey != "" && c.SetValue != "" {
 		// Validate key and value
@@ -231,42 +231,42 @@ func (c *ConfigCmd) Run(ctx *kong.Context, globals *CLI) error {
 		if err := ValidateConfigValue(c.SetKey, c.SetValue); err != nil {
 			return err
 		}
-		
+
 		// Load current config
 		cfg, err := loadConfig()
 		if err != nil {
 			return fmt.Errorf("failed to load config: %w", err)
 		}
-		
+
 		// Set the value
 		if err := cfg.Set(c.SetKey, c.SetValue); err != nil {
 			return fmt.Errorf("failed to set config value: %w", err)
 		}
-		
+
 		// Save config
 		if err := saveConfig(cfg); err != nil {
 			return fmt.Errorf("failed to save config: %w", err)
 		}
-		
+
 		fmt.Printf("Set %s = %s\n", c.SetKey, c.SetValue)
 		return nil
 	}
-	
+
 	// Check if only one of key/value is provided (error case)
 	if c.SetKey != "" || c.SetValue != "" {
 		return fmt.Errorf("both --set-key and --set-value must be provided together")
 	}
-	
+
 	if c.Interactive {
 		return runInteractiveConfig()
 	}
-	
+
 	// Default: show current config
 	cfg, err := loadConfig()
 	if err != nil {
 		return fmt.Errorf("failed to load config: %w", err)
 	}
-	
+
 	fmt.Println(cfg.String())
 	return nil
 }
@@ -289,7 +289,7 @@ func (cli *CLI) BeforeApply(ctx *kong.Context) error {
 		fmt.Println("chr version 0.1.1")
 		os.Exit(0)
 	}
-	
+
 	// Handle LLM flag
 	if cli.LLM {
 		// Check if we're in config context for specific config guide
@@ -300,14 +300,14 @@ func (cli *CLI) BeforeApply(ctx *kong.Context) error {
 		}
 		os.Exit(0)
 	}
-	
+
 	return nil
 }
 
 // ExecuteCLI runs the CLI application
 func ExecuteCLI(args []string) error {
 	var cli CLI
-	
+
 	parser, err := kong.New(&cli,
 		kong.Name("chr"),
 		kong.Description("Git commit manager for cherry-picking between production and homologation branches\n\nUsage: chr pick [flags]  # Cherry-pick commits (default)\n       chr pick --show   # Show commits (dry run)\n       chr config        # Manage configuration"),
@@ -319,17 +319,17 @@ func ExecuteCLI(args []string) error {
 	if err != nil {
 		return fmt.Errorf("failed to create parser: %w", err)
 	}
-	
+
 	ctx, err := parser.Parse(args)
 	if err != nil {
 		return err
 	}
-	
+
 	// Apply global interceptor
 	if err := cli.BeforeApply(ctx); err != nil {
 		return err
 	}
-	
+
 	// Run the selected command
 	return ctx.Run(ctx, &cli)
 }
@@ -346,11 +346,11 @@ func ValidateConfigKey(key string) error {
 		"suffix_hml": true,
 		"color":      true,
 	}
-	
+
 	if !validKeys[key] {
 		return fmt.Errorf("invalid configuration key: %s", key)
 	}
-	
+
 	return nil
 }
 
@@ -365,7 +365,7 @@ func ValidateConfigValue(key, value string) error {
 			return fmt.Errorf("%s cannot be empty", key)
 		}
 	}
-	
+
 	return nil
 }
 
@@ -380,20 +380,20 @@ func saveConfig(cfg *config.Config) error {
 
 func runInteractiveConfig() error {
 	fmt.Println("Interactive configuration setup:")
-	
+
 	cfg, err := loadConfig()
 	if err != nil {
 		return fmt.Errorf("failed to load config: %w", err)
 	}
-	
+
 	fmt.Printf("Current prefix: %s\n", cfg.Prefix)
 	fmt.Printf("Current production suffix: %s\n", cfg.SuffixPrd)
 	fmt.Printf("Current homologation suffix: %s\n", cfg.SuffixHml)
 	fmt.Printf("Current color setting: %v\n", cfg.Color)
-	
+
 	// TODO: Add actual interactive prompts (would need a prompt library)
 	fmt.Println("(Interactive prompts not yet implemented - use --set instead)")
-	
+
 	return nil
 }
 
@@ -404,7 +404,7 @@ func displayCommit(index int, commit git.Commit, currentUser string, enableColor
 		fmt.Printf("%d. %s | %s | %s | %s\n", index, commit.Hash, commit.Author, commit.Date, commit.Message)
 		return
 	}
-	
+
 	// Colored output
 	indexColor := color.New(color.FgCyan, color.Bold)
 	hashColor := color.New(color.FgYellow)
@@ -414,7 +414,7 @@ func displayCommit(index int, commit git.Commit, currentUser string, enableColor
 	}
 	dateColor := color.New(color.FgBlue)
 	messageColor := color.New(color.FgWhite)
-	
+
 	// Check message type for different colors
 	if strings.HasPrefix(commit.Message, "feat:") {
 		messageColor = color.New(color.FgGreen)
@@ -425,7 +425,7 @@ func displayCommit(index int, commit git.Commit, currentUser string, enableColor
 	} else if strings.HasPrefix(commit.Message, "refactor:") {
 		messageColor = color.New(color.FgMagenta)
 	}
-	
+
 	fmt.Printf("%s %s | %s | %s | %s\n",
 		indexColor.Sprintf("%d.", index),
 		hashColor.Sprint(commit.Hash),
@@ -588,31 +588,31 @@ func handleContinue() error {
 	if err != nil {
 		return fmt.Errorf("failed to get current directory: %w", err)
 	}
-	
+
 	cherryPickHeadPath := fmt.Sprintf("%s/.git/CHERRY_PICK_HEAD", repoDir)
 	if _, err := os.Stat(cherryPickHeadPath); os.IsNotExist(err) {
 		fmt.Println("No cherry-pick in progress. Nothing to continue.")
 		return nil
 	}
-	
+
 	fmt.Println("Continuing cherry-pick...")
-	
+
 	cmd := exec.Command("git", "cherry-pick", "--continue")
 	cmd.Dir = repoDir
 	if err := cmd.Run(); err != nil {
 		statusCmd := exec.Command("git", "status", "--porcelain")
 		statusCmd.Dir = repoDir
 		statusOutput, _ := statusCmd.Output()
-		
+
 		if len(statusOutput) > 0 {
 			fmt.Println("Still have conflicts to resolve:")
 			fmt.Printf("%s", string(statusOutput))
 			fmt.Println("\nResolve conflicts and run 'chr pick --continue' again.")
 		}
-		
+
 		return fmt.Errorf("cherry-pick continue failed: %v", err)
 	}
-	
+
 	fmt.Println("✓ Cherry-pick completed successfully!")
 	return nil
 }

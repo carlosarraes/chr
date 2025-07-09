@@ -10,7 +10,7 @@ import (
 type CommitMatch struct {
 	Source git.Commit // Commit from source branch (PRD)
 	Target git.Commit // Matching commit from target branch (HML)
-	Score  int         // Match confidence score (0-100)
+	Score  int        // Match confidence score (0-100)
 }
 
 // CommitMatcher provides commit matching functionality
@@ -27,7 +27,7 @@ func NewCommitMatcher() *CommitMatcher {
 // This is the core function that solves the rebase hash-change problem
 func (cm *CommitMatcher) FindMatches(sourceCommits, targetCommits []git.Commit) []CommitMatch {
 	var matches []CommitMatch
-	
+
 	for _, sourceCommit := range sourceCommits {
 		for _, targetCommit := range targetCommits {
 			if match, score := cm.matchCommits(sourceCommit, targetCommit); match {
@@ -40,7 +40,7 @@ func (cm *CommitMatcher) FindMatches(sourceCommits, targetCommits []git.Commit) 
 			}
 		}
 	}
-	
+
 	return matches
 }
 
@@ -48,18 +48,18 @@ func (cm *CommitMatcher) FindMatches(sourceCommits, targetCommits []git.Commit) 
 func (cm *CommitMatcher) GetUnmatched(sourceCommits, targetCommits []git.Commit) []git.Commit {
 	matches := cm.FindMatches(sourceCommits, targetCommits)
 	matchedHashes := make(map[string]bool)
-	
+
 	for _, match := range matches {
 		matchedHashes[match.Source.Hash] = true
 	}
-	
+
 	var unmatched []git.Commit
 	for _, commit := range sourceCommits {
 		if !matchedHashes[commit.Hash] {
 			unmatched = append(unmatched, commit)
 		}
 	}
-	
+
 	return unmatched
 }
 
@@ -70,16 +70,16 @@ func (cm *CommitMatcher) matchCommits(source, target git.Commit) (bool, int) {
 	if source.Signature() == target.Signature() {
 		return true, 100
 	}
-	
+
 	// Strategy 2: Message + Author match (ignoring date)
 	// This handles cases where commits are cherry-picked on different dates
 	if cm.sameAuthorAndMessage(source, target) {
 		return true, 80
 	}
-	
+
 	// Strategy 3: Fuzzy message matching (future enhancement)
 	// Could implement Levenshtein distance or other algorithms
-	
+
 	return false, 0
 }
 
@@ -88,11 +88,11 @@ func (cm *CommitMatcher) sameAuthorAndMessage(c1, c2 git.Commit) bool {
 	if c1.Author != c2.Author {
 		return false
 	}
-	
+
 	// Compare first line of commit messages (ignore multiline descriptions)
 	msg1 := strings.Split(c1.Message, "\n")[0]
 	msg2 := strings.Split(c2.Message, "\n")[0]
-	
+
 	return strings.TrimSpace(msg1) == strings.TrimSpace(msg2)
 }
 
@@ -103,7 +103,7 @@ func FilterUnpickedCommits(prdCommits, hmlCommits []git.Commit) []git.Commit {
 		// If HML is empty, all PRD commits are unpicked
 		return prdCommits
 	}
-	
+
 	matcher := NewCommitMatcher()
 	return matcher.GetUnmatched(prdCommits, hmlCommits)
 }
@@ -118,7 +118,7 @@ type CommitGroup struct {
 func GroupCommitsByMessage(commits []git.Commit) []CommitGroup {
 	groups := make(map[string][]git.Commit)
 	var order []string
-	
+
 	for _, commit := range commits {
 		prefix := extractMessagePrefix(commit.Message)
 		if _, exists := groups[prefix]; !exists {
@@ -126,7 +126,7 @@ func GroupCommitsByMessage(commits []git.Commit) []CommitGroup {
 		}
 		groups[prefix] = append(groups[prefix], commit)
 	}
-	
+
 	var result []CommitGroup
 	for _, prefix := range order {
 		result = append(result, CommitGroup{
@@ -134,7 +134,7 @@ func GroupCommitsByMessage(commits []git.Commit) []CommitGroup {
 			Commits: groups[prefix],
 		})
 	}
-	
+
 	return result
 }
 
@@ -162,13 +162,13 @@ func SummarizeCommits(commits []git.Commit) CommitSummary {
 		ByAuthor: make(map[string]int),
 		ByType:   make(map[string]int),
 	}
-	
+
 	for _, commit := range commits {
 		summary.ByAuthor[commit.Author]++
-		
+
 		prefix := extractMessagePrefix(commit.Message)
 		summary.ByType[prefix]++
 	}
-	
+
 	return summary
 }

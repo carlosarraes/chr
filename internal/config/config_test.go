@@ -34,7 +34,7 @@ func TestLoadConfig_FromFile(t *testing.T) {
 	// Create temporary config file
 	tmpDir := t.TempDir()
 	configFile := filepath.Join(tmpDir, "chr.toml")
-	
+
 	configContent := `
 prefix = "ACME-"
 suffix_prd = "-prod"
@@ -73,7 +73,7 @@ func TestLoadConfig_FromEnv(t *testing.T) {
 			t.Setenv(key, "")
 		}
 	}
-	
+
 	// Set environment variables
 	t.Setenv("CHR_PREFIX", "ENV-")
 	t.Setenv("CHR_SUFFIX_PRD", "-env-prod")
