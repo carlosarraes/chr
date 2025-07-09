@@ -110,8 +110,20 @@ func GetCommits(repoDir, targetBranch, sourceBranch string, limit int) ([]Commit
 
 	var sourceRef, targetRef string
 	if hasOrigin {
-		sourceRef = fmt.Sprintf("origin/%s", sourceBranch)
-		targetRef = fmt.Sprintf("origin/%s", targetBranch)
+		sourceRemoteRef := fmt.Sprintf("origin/%s", sourceBranch)
+		targetRemoteRef := fmt.Sprintf("origin/%s", targetBranch)
+		
+		if remoteExists, _ := BranchExists(repoDir, sourceRemoteRef); remoteExists {
+			sourceRef = sourceRemoteRef
+		} else {
+			sourceRef = sourceBranch
+		}
+		
+		if remoteExists, _ := BranchExists(repoDir, targetRemoteRef); remoteExists {
+			targetRef = targetRemoteRef
+		} else {
+			targetRef = targetBranch
+		}
 	} else {
 		sourceRef = sourceBranch
 		targetRef = targetBranch
@@ -129,12 +141,15 @@ func GetCommits(repoDir, targetBranch, sourceBranch string, limit int) ([]Commit
 		args = append(args, fmt.Sprintf("-%d", limit))
 	}
 
+	fmt.Printf("Debug: Running git command: git %s\n", strings.Join(args, " "))
+	fmt.Printf("Debug: sourceRef=%s, targetRef=%s\n", sourceRef, targetRef)
+
 	cmd := exec.Command("git", args...)
 	cmd.Dir = repoDir
 
 	output, err := cmd.Output()
 	if err != nil {
-		return nil, fmt.Errorf("failed to get commits: %w", err)
+		return nil, fmt.Errorf("failed to get commits with command 'git %s': %w", strings.Join(args, " "), err)
 	}
 
 	lines := strings.Split(strings.TrimSpace(string(output)), "\n")
