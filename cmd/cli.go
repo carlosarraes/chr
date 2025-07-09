@@ -18,13 +18,14 @@ import (
 // CLI represents the command-line interface structure
 type CLI struct {
 	// Global flags
-	Version   bool `kong:"short='v',help='Show version information'"`
-	NoColor   bool `kong:"help='Disable colored output'"`
-	LLM       bool `kong:"help='Show LLM guide for chr usage'"`
+	VersionFlag bool `kong:"short='v',name='version',help='Show version information'"`
+	NoColor     bool `kong:"help='Disable colored output'"`
+	LLM         bool `kong:"help='Show LLM guide for chr usage'"`
 	
 	// Commands
-	Pick   PickCmd   `kong:"cmd,help='Show and cherry-pick commits'"`
-	Config ConfigCmd `kong:"cmd,help='Manage configuration'"`
+	Pick    PickCmd    `kong:"cmd,help='Show and cherry-pick commits'"`
+	Config  ConfigCmd  `kong:"cmd,help='Manage configuration'"`
+	Version VersionCmd `kong:"cmd,help='Show version information'"`
 }
 
 type PickCmd struct {
@@ -44,6 +45,8 @@ type ConfigCmd struct {
 	SetValue    string `kong:"help='Configuration value to set'"`
 	Interactive bool   `kong:"name='setup',help='Interactive configuration setup'"`
 }
+
+type VersionCmd struct {}
 
 func (p *PickCmd) Run(ctx *kong.Context, globals *CLI) error {
 	// Load configuration first
@@ -248,6 +251,11 @@ func (c *ConfigCmd) Run(ctx *kong.Context, globals *CLI) error {
 	return nil
 }
 
+func (v *VersionCmd) Run(ctx *kong.Context, globals *CLI) error {
+	fmt.Println("chr version 0.1.1")
+	return nil
+}
+
 // validateDate validates a date string in YYYY-MM-DD format
 func validateDate(dateStr string) error {
 	_, err := time.Parse("2006-01-02", dateStr)
@@ -257,8 +265,8 @@ func validateDate(dateStr string) error {
 // beforeInterceptor handles global setup
 func (cli *CLI) BeforeApply(ctx *kong.Context) error {
 	// Handle version flag
-	if cli.Version {
-		fmt.Println("chr version 0.1.0")
+	if cli.VersionFlag {
+		fmt.Println("chr version 0.1.1")
 		os.Exit(0)
 	}
 	
