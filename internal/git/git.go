@@ -83,54 +83,86 @@ func BranchExists(repoDir, branch string) (bool, error) {
 	return true, nil
 }
 
+func FetchBranches(repoDir string, branches ...string) error {
+	checkCmd := exec.Command("git", "remote", "get-url", "origin")
+	checkCmd.Dir = repoDir
+	if err := checkCmd.Run(); err != nil {
+		return nil
+	}
+
+	cmd := exec.Command("git", "fetch", "origin")
+	cmd.Dir = repoDir
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("failed to fetch from origin: %w", err)
+	}
+	return nil
+}
+
 // GetCommits gets commits that are in sourceBranch but not in targetBranch
 func GetCommits(repoDir, targetBranch, sourceBranch string, limit int) ([]Commit, error) {
+	if err := FetchBranches(repoDir, targetBranch, sourceBranch); err != nil {
+		return nil, fmt.Errorf("failed to fetch branches: %w", err)
+	}
+
+	checkCmd := exec.Command("git", "remote", "get-url", "origin")
+	checkCmd.Dir = repoDir
+	hasOrigin := checkCmd.Run() == nil
+
+	var sourceRef, targetRef string
+	if hasOrigin {
+		sourceRef = fmt.Sprintf("origin/%s", sourceBranch)
+		targetRef = fmt.Sprintf("origin/%s", targetBranch)
+	} else {
+		sourceRef = sourceBranch
+		targetRef = targetBranch
+	}
+
 	// Use git log to find commits in sourceBranch that are not in targetBranch
 	args := []string{"log",
-		fmt.Sprintf("^%s", targetBranch), // Exclude commits in targetBranch
-		sourceBranch,                     // Include commits in sourceBranch
-		"--format=%h|%an|%s|%ad",        // Format: hash|author|subject|date
-		"--date=short",                   // Use short date format (YYYY-MM-DD)
+		fmt.Sprintf("^%s", targetRef),
+		sourceRef,
+		"--format=%h|%an|%s|%ad",
+		"--date=short",
 	}
-	
+
 	if limit > 0 {
 		args = append(args, fmt.Sprintf("-%d", limit))
 	}
-	
+
 	cmd := exec.Command("git", args...)
 	cmd.Dir = repoDir
-	
+
 	output, err := cmd.Output()
 	if err != nil {
 		return nil, fmt.Errorf("failed to get commits: %w", err)
 	}
-	
+
 	lines := strings.Split(strings.TrimSpace(string(output)), "\n")
 	if len(lines) == 1 && lines[0] == "" {
 		return []Commit{}, nil // No commits found
 	}
-	
+
 	commits := make([]Commit, 0, len(lines))
 	for _, line := range lines {
 		if line == "" {
 			continue
 		}
-		
+
 		parts := strings.Split(line, "|")
 		if len(parts) < 4 {
 			continue
 		}
-		
+
 		commit := Commit{
 			Hash:    parts[0],
 			Author:  parts[1],
 			Message: parts[2],
 			Date:    parts[3],
 		}
-		
+
 		commits = append(commits, commit)
 	}
-	
+
 	return commits, nil
 }
 
@@ -150,14 +182,14 @@ func FilterCommitsByDate(commits []Commit, filter *DateFilter) []Commit {
 	if filter == nil {
 		return commits
 	}
-	
+
 	filtered := make([]Commit, 0)
 	for _, commit := range commits {
 		commitDate, err := time.Parse("2006-01-02", commit.Date)
 		if err != nil {
 			continue // Skip commits with invalid dates
 		}
-		
+
 		switch filter.Type {
 		case DateFilterTypeToday:
 			today := time.Now().Truncate(24 * time.Hour)
@@ -184,7 +216,7 @@ func FilterCommitsByDate(commits []Commit, filter *DateFilter) []Commit {
 			}
 		}
 	}
-	
+
 	return filtered
 }
 
@@ -192,44 +224,44 @@ func CherryPickCommits(repoDir string, commitHashes []string) error {
 	if len(commitHashes) == 0 {
 		return nil
 	}
-	
+
 	fmt.Printf("Cherry-picking %d commits...\n", len(commitHashes))
-	
+
 	oldestCommit := commitHashes[len(commitHashes)-1]
 	newestCommit := commitHashes[0]
 	commitRange := fmt.Sprintf("%s^..%s", oldestCommit, newestCommit)
-	
+
 	revListCmd := exec.Command("git", "rev-list", "--reverse", commitRange)
 	revListCmd.Dir = repoDir
 	revListOutput, err := revListCmd.Output()
 	if err != nil {
 		return fmt.Errorf("failed to get commit range: %v", err)
 	}
-	
+
 	cherryPickCmd := exec.Command("git", "cherry-pick", "--stdin")
 	cherryPickCmd.Dir = repoDir
 	cherryPickCmd.Stdin = strings.NewReader(string(revListOutput))
-	
+
 	if err := cherryPickCmd.Run(); err != nil {
 		statusCmd := exec.Command("git", "status", "--porcelain")
 		statusCmd.Dir = repoDir
 		statusOutput, _ := statusCmd.Output()
-		
+
 		fmt.Println("\nConflicts found - needs to be resolved.")
-		
+
 		if len(statusOutput) > 0 {
 			fmt.Printf("\nFiles with conflicts:\n%s", string(statusOutput))
 		}
-		
+
 		fmt.Println("\nWhat to do:")
 		fmt.Println("1. Resolve the conflicts in the files listed above")
 		fmt.Println("2. Add the resolved files: git add <file>")
 		fmt.Println("3. Continue: chr pick --continue")
 		fmt.Println("4. Or abort: git cherry-pick --abort")
-		
+
 		return nil
 	}
-	
+
 	fmt.Println("✓ Successfully cherry-picked all commits!")
 	return nil
 }
@@ -244,25 +276,25 @@ func ParseBranchName(branchName, prefix string) (string, error) {
 	if !strings.HasPrefix(branchName, prefix) {
 		return "", fmt.Errorf("branch '%s' doesn't start with prefix '%s'", branchName, prefix)
 	}
-	
+
 	// Remove prefix and extract card number (everything until first suffix or end)
 	withoutPrefix := strings.TrimPrefix(branchName, prefix)
 	parts := strings.Split(withoutPrefix, "-")
 	if len(parts) == 0 {
 		return "", fmt.Errorf("no card number found in branch name '%s'", branchName)
 	}
-	
+
 	// First part should be the card number
 	cardNumber := parts[0]
 	if cardNumber == "" {
 		return "", fmt.Errorf("empty card number in branch name '%s'", branchName)
 	}
-	
+
 	// Validate that it's numeric (optional - depends on your naming convention)
 	if _, err := strconv.Atoi(cardNumber); err != nil {
 		// If it's not numeric, just return it as-is
 		// This allows for non-numeric card numbers like "FEAT-123"
 	}
-	
+
 	return cardNumber, nil
 }
