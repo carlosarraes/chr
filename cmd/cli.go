@@ -3,6 +3,7 @@ package cmd
 import (
 	"fmt"
 	"os"
+	"os/exec"
 	"strconv"
 	"strings"
 	"time"
@@ -37,6 +38,7 @@ type PickCmd struct {
 	Since       string `kong:"help='Show commits since date (YYYY-MM-DD)'"`
 	Until       string `kong:"help='Show commits until date (YYYY-MM-DD)'"`
 	Interactive bool   `kong:"short='i',help='Interactive commit selection'"`
+	Continue    bool   `kong:"help='Continue cherry-picking after resolving conflicts'"`
 }
 
 // ConfigCmd represents the config subcommand
@@ -49,6 +51,10 @@ type ConfigCmd struct {
 type VersionCmd struct {}
 
 func (p *PickCmd) Run(ctx *kong.Context, globals *CLI) error {
+	if p.Continue {
+		return handleContinue()
+	}
+	
 	// Load configuration first
 	cfg, err := loadConfig()
 	if err != nil {
@@ -97,13 +103,15 @@ func (p *PickCmd) Run(ctx *kong.Context, globals *CLI) error {
 		return fmt.Errorf("HML branch '%s' does not exist", hmlBranch)
 	}
 	
-	commitCount := p.Count
+	prdCommitLimit := 100
 	if p.Latest {
-		commitCount = 100
+		prdCommitLimit = 20
+	} else if p.Show {
+		prdCommitLimit = 0
 	}
 	
 	// Get commits from PRD branch
-	prdCommits, err := git.GetCommits(repoDir, hmlBranch, prdBranch, commitCount)
+	prdCommits, err := git.GetCommits(repoDir, hmlBranch, prdBranch, prdCommitLimit)
 	if err != nil {
 		return fmt.Errorf("failed to get PRD commits: %w", err)
 	}
@@ -119,12 +127,7 @@ func (p *PickCmd) Run(ctx *kong.Context, globals *CLI) error {
 		return fmt.Errorf("failed to get current user: %w", err)
 	}
 	
-	var userCommits []git.Commit
-	if p.Latest {
-		userCommits = git.FilterCommitsByAuthor(prdCommits, currentUser)
-	} else {
-		userCommits = prdCommits
-	}
+	userCommits := git.FilterCommitsByAuthor(prdCommits, currentUser)
 	
 	// Apply date filtering
 	var filteredCommits []git.Commit
@@ -169,6 +172,24 @@ func (p *PickCmd) Run(ctx *kong.Context, globals *CLI) error {
 		return nil
 	}
 	
+	if !p.Show {
+		if !p.Latest && p.Count != 5 {
+			if len(unpickedCommits) > p.Count {
+				unpickedCommits = unpickedCommits[:p.Count]
+			}
+		} else if !p.Latest {
+			if len(unpickedCommits) > p.Count {
+				unpickedCommits = unpickedCommits[:p.Count]
+			}
+		}
+	} else {
+		if p.Count != 5 {
+			if len(unpickedCommits) > p.Count {
+				unpickedCommits = unpickedCommits[:p.Count]
+			}
+		}
+	}
+	
 	// Display commits
 	fmt.Printf("\nFound %d unpicked commits:\n", len(unpickedCommits))
 	for i, commit := range unpickedCommits {
@@ -181,7 +202,6 @@ func (p *PickCmd) Run(ctx *kong.Context, globals *CLI) error {
 	}
 	
 	// Cherry-pick mode
-	fmt.Printf("\nCherry-picking %d commits...\n", len(unpickedCommits))
 	
 	// Extract commit hashes
 	var commitHashes []string
@@ -561,6 +581,40 @@ CHR_COLOR="false"
 
 chr excels at eliminating the manual work of identifying and cherry-picking commits between branches while handling Git rebase scenarios that break traditional tools.
 `)
+}
+
+func handleContinue() error {
+	repoDir, err := os.Getwd()
+	if err != nil {
+		return fmt.Errorf("failed to get current directory: %w", err)
+	}
+	
+	cherryPickHeadPath := fmt.Sprintf("%s/.git/CHERRY_PICK_HEAD", repoDir)
+	if _, err := os.Stat(cherryPickHeadPath); os.IsNotExist(err) {
+		fmt.Println("No cherry-pick in progress. Nothing to continue.")
+		return nil
+	}
+	
+	fmt.Println("Continuing cherry-pick...")
+	
+	cmd := exec.Command("git", "cherry-pick", "--continue")
+	cmd.Dir = repoDir
+	if err := cmd.Run(); err != nil {
+		statusCmd := exec.Command("git", "status", "--porcelain")
+		statusCmd.Dir = repoDir
+		statusOutput, _ := statusCmd.Output()
+		
+		if len(statusOutput) > 0 {
+			fmt.Println("Still have conflicts to resolve:")
+			fmt.Printf("%s", string(statusOutput))
+			fmt.Println("\nResolve conflicts and run 'chr pick --continue' again.")
+		}
+		
+		return fmt.Errorf("cherry-pick continue failed: %v", err)
+	}
+	
+	fmt.Println("✓ Cherry-pick completed successfully!")
+	return nil
 }
 
 // showConfigLLMGuide displays the config-specific LLM guide
