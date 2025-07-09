@@ -6,8 +6,8 @@ import (
 
 func TestExecuteCLI_Version(t *testing.T) {
 	// Test that the CLI structure can handle version parsing
-	cli := &CLI{Version: true}
-	if !cli.Version {
+	cli := &CLI{VersionFlag: true}
+	if !cli.VersionFlag {
 		t.Error("Version flag should be set")
 	}
 }
