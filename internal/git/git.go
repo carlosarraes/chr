@@ -109,24 +109,18 @@ func FetchBranches(repoDir string, debug bool, branches ...string) error {
 
 // GetCommits gets commits that are in sourceBranch but not in targetBranch
 func GetCommits(repoDir, targetBranch, sourceBranch string, limit int, debug bool) ([]Commit, error) {
-	if err := FetchBranches(repoDir, debug, targetBranch, sourceBranch); err != nil {
-		return nil, fmt.Errorf("failed to fetch branches: %w", err)
-	}
-
-	checkCmd := exec.Command("git", "remote", "get-url", "origin")
-	checkCmd.Dir = repoDir
-	hasOrigin := checkCmd.Run() == nil
-	if debug {
-		fmt.Printf("Debug: hasOrigin=%v\n", hasOrigin)
-	}
-
 	var sourceRef, targetRef string
+	
 	if localExists, _ := BranchExists(repoDir, sourceBranch); localExists {
 		sourceRef = sourceBranch
 		if debug {
 			fmt.Printf("Debug: Using local source branch: %s\n", sourceRef)
 		}
-	} else if hasOrigin {
+	} else {
+		if err := FetchBranches(repoDir, debug, targetBranch, sourceBranch); err != nil {
+			return nil, fmt.Errorf("failed to fetch branches: %w", err)
+		}
+		
 		sourceRemoteRef := fmt.Sprintf("origin/%s", sourceBranch)
 		if remoteExists, _ := BranchExists(repoDir, sourceRemoteRef); remoteExists {
 			sourceRef = sourceRemoteRef
@@ -139,11 +133,6 @@ func GetCommits(repoDir, targetBranch, sourceBranch string, limit int, debug boo
 				fmt.Printf("Debug: Neither local nor remote source branch found, using: %s\n", sourceRef)
 			}
 		}
-	} else {
-		sourceRef = sourceBranch
-		if debug {
-			fmt.Printf("Debug: No origin remote, using local source branch: %s\n", sourceRef)
-		}
 	}
 	
 	if localExists, _ := BranchExists(repoDir, targetBranch); localExists {
@@ -151,7 +140,11 @@ func GetCommits(repoDir, targetBranch, sourceBranch string, limit int, debug boo
 		if debug {
 			fmt.Printf("Debug: Using local target branch: %s\n", targetRef)
 		}
-	} else if hasOrigin {
+	} else {
+		if err := FetchBranches(repoDir, debug, targetBranch, sourceBranch); err != nil {
+			return nil, fmt.Errorf("failed to fetch branches: %w", err)
+		}
+		
 		targetRemoteRef := fmt.Sprintf("origin/%s", targetBranch)
 		if remoteExists, _ := BranchExists(repoDir, targetRemoteRef); remoteExists {
 			targetRef = targetRemoteRef
@@ -163,11 +156,6 @@ func GetCommits(repoDir, targetBranch, sourceBranch string, limit int, debug boo
 			if debug {
 				fmt.Printf("Debug: Neither local nor remote target branch found, using: %s\n", targetRef)
 			}
-		}
-	} else {
-		targetRef = targetBranch
-		if debug {
-			fmt.Printf("Debug: No origin remote, using local target branch: %s\n", targetRef)
 		}
 	}
 
