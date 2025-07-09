@@ -40,6 +40,7 @@ type PickCmd struct {
 	Interactive bool   `kong:"short='i',help='Interactive commit selection'"`
 	Continue    bool   `kong:"help='Continue cherry-picking after resolving conflicts'"`
 	Debug       bool   `kong:"short='d',help='Show debug output'"`
+	NoFilter    bool   `kong:"help='Disable smart filtering - show latest N commits without deduplication'"`
 }
 
 // ConfigCmd represents the config subcommand
@@ -166,14 +167,20 @@ func (p *PickCmd) Run(ctx *kong.Context, globals *CLI) error {
 		return nil
 	}
 
-	// Get HML commits for comparison (to find already picked commits)
-	hmlCommits, err := git.GetCommits(repoDir, "main", hmlBranch, 100, p.Debug)
-	if err != nil {
-		return fmt.Errorf("failed to get HML commits: %w", err)
-	}
+	var unpickedCommits []git.Commit
+	if p.NoFilter {
+		unpickedCommits = filteredCommits
+		if p.Debug {
+			fmt.Printf("Debug: Using --no-filter, skipping smart deduplication\n")
+		}
+	} else {
+		hmlCommits, err := git.GetCommits(repoDir, "main", hmlBranch, 100, p.Debug)
+		if err != nil {
+			return fmt.Errorf("failed to get HML commits: %w", err)
+		}
 
-	// Find commits that haven't been picked yet
-	unpickedCommits := picker.FilterUnpickedCommits(filteredCommits, hmlCommits, p.Debug)
+		unpickedCommits = picker.FilterUnpickedCommits(filteredCommits, hmlCommits, p.Debug)
+	}
 
 	if len(unpickedCommits) == 0 {
 		fmt.Println("All commits have already been picked to HML branch.")
