@@ -86,13 +86,18 @@ func BranchExists(repoDir, branch string) (bool, error) {
 // GetCommits gets commits that are in sourceBranch but not in targetBranch
 func GetCommits(repoDir, targetBranch, sourceBranch string, limit int) ([]Commit, error) {
 	// Use git log to find commits in sourceBranch that are not in targetBranch
-	cmd := exec.Command("git", "log",
+	args := []string{"log",
 		fmt.Sprintf("^%s", targetBranch), // Exclude commits in targetBranch
 		sourceBranch,                     // Include commits in sourceBranch
-		fmt.Sprintf("-%d", limit),        // Limit number of commits
 		"--format=%h|%an|%s|%ad",        // Format: hash|author|subject|date
 		"--date=short",                   // Use short date format (YYYY-MM-DD)
-	)
+	}
+	
+	if limit > 0 {
+		args = append(args, fmt.Sprintf("-%d", limit))
+	}
+	
+	cmd := exec.Command("git", args...)
 	cmd.Dir = repoDir
 	
 	output, err := cmd.Output()
@@ -183,22 +188,49 @@ func FilterCommitsByDate(commits []Commit, filter *DateFilter) []Commit {
 	return filtered
 }
 
-// CherryPickCommits cherry-picks a list of commits
 func CherryPickCommits(repoDir string, commitHashes []string) error {
 	if len(commitHashes) == 0 {
 		return nil
 	}
 	
-	// Cherry-pick commits individually in reverse order (oldest first)
-	// The commits are passed in newest-first order from git log, so reverse them
-	for i := len(commitHashes) - 1; i >= 0; i-- {
-		cmd := exec.Command("git", "cherry-pick", commitHashes[i])
-		cmd.Dir = repoDir
-		if err := cmd.Run(); err != nil {
-			return fmt.Errorf("failed to cherry-pick commit %s: %w", commitHashes[i], err)
-		}
+	fmt.Printf("Cherry-picking %d commits...\n", len(commitHashes))
+	
+	oldestCommit := commitHashes[len(commitHashes)-1]
+	newestCommit := commitHashes[0]
+	commitRange := fmt.Sprintf("%s^..%s", oldestCommit, newestCommit)
+	
+	revListCmd := exec.Command("git", "rev-list", "--reverse", commitRange)
+	revListCmd.Dir = repoDir
+	revListOutput, err := revListCmd.Output()
+	if err != nil {
+		return fmt.Errorf("failed to get commit range: %v", err)
 	}
 	
+	cherryPickCmd := exec.Command("git", "cherry-pick", "--stdin")
+	cherryPickCmd.Dir = repoDir
+	cherryPickCmd.Stdin = strings.NewReader(string(revListOutput))
+	
+	if err := cherryPickCmd.Run(); err != nil {
+		statusCmd := exec.Command("git", "status", "--porcelain")
+		statusCmd.Dir = repoDir
+		statusOutput, _ := statusCmd.Output()
+		
+		fmt.Println("\nConflicts found - needs to be resolved.")
+		
+		if len(statusOutput) > 0 {
+			fmt.Printf("\nFiles with conflicts:\n%s", string(statusOutput))
+		}
+		
+		fmt.Println("\nWhat to do:")
+		fmt.Println("1. Resolve the conflicts in the files listed above")
+		fmt.Println("2. Add the resolved files: git add <file>")
+		fmt.Println("3. Continue: chr pick --continue")
+		fmt.Println("4. Or abort: git cherry-pick --abort")
+		
+		return nil
+	}
+	
+	fmt.Println("✓ Successfully cherry-picked all commits!")
 	return nil
 }
 
