@@ -287,7 +287,7 @@ func (c *ConfigCmd) Run(ctx *kong.Context, globals *CLI) error {
 }
 
 func (v *VersionCmd) Run(ctx *kong.Context, globals *CLI) error {
-	fmt.Println("chr version 0.1.1")
+	fmt.Println("chr version 0.1.2")
 	return nil
 }
 
@@ -301,7 +301,7 @@ func validateDate(dateStr string) error {
 func (cli *CLI) BeforeApply(ctx *kong.Context) error {
 	// Handle version flag
 	if cli.VersionFlag {
-		fmt.Println("chr version 0.1.1")
+		fmt.Println("chr version 0.1.2")
 		os.Exit(0)
 	}
 
