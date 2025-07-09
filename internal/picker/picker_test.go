@@ -184,7 +184,7 @@ func TestFilterUnpickedCommits(t *testing.T) {
 		{Hash: "xyz222", Author: "Other User", Message: "chore: unrelated", Date: "2024-01-04"},
 	}
 
-	unpicked := FilterUnpickedCommits(prdCommits, hmlCommits)
+	unpicked := FilterUnpickedCommits(prdCommits, hmlCommits, false)
 
 	// Should return 2 commits that haven't been picked yet
 	if len(unpicked) != 2 {
@@ -212,7 +212,7 @@ func TestFilterUnpickedCommits_EmptyHML(t *testing.T) {
 
 	var hmlCommits []git.Commit // Empty HML branch
 
-	unpicked := FilterUnpickedCommits(prdCommits, hmlCommits)
+	unpicked := FilterUnpickedCommits(prdCommits, hmlCommits, false)
 
 	// Should return all PRD commits since HML is empty
 	if len(unpicked) != 2 {

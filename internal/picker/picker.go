@@ -1,6 +1,7 @@
 package picker
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/carlosarraes/chr/internal/git"
@@ -98,14 +99,36 @@ func (cm *CommitMatcher) sameAuthorAndMessage(c1, c2 git.Commit) bool {
 
 // FilterUnpickedCommits returns commits from PRD that haven't been picked to HML
 // This is the main function used by the CLI to find commits to cherry-pick
-func FilterUnpickedCommits(prdCommits, hmlCommits []git.Commit) []git.Commit {
+func FilterUnpickedCommits(prdCommits, hmlCommits []git.Commit, debug bool) []git.Commit {
 	if len(hmlCommits) == 0 {
 		// If HML is empty, all PRD commits are unpicked
 		return prdCommits
 	}
 
+	if debug {
+		fmt.Printf("Debug: Filtering %d PRD commits against %d HML commits\n", len(prdCommits), len(hmlCommits))
+	}
+
 	matcher := NewCommitMatcher()
-	return matcher.GetUnmatched(prdCommits, hmlCommits)
+	matches := matcher.FindMatches(prdCommits, hmlCommits)
+	
+	if debug {
+		fmt.Printf("Debug: Found %d matches:\n", len(matches))
+		for _, match := range matches {
+			fmt.Printf("  PRD: %s (%s) -> HML: %s (%s) [score: %d]\n", 
+				match.Source.Hash, match.Source.Message, 
+				match.Target.Hash, match.Target.Message, 
+				match.Score)
+		}
+	}
+	
+	unmatched := matcher.GetUnmatched(prdCommits, hmlCommits)
+	
+	if debug {
+		fmt.Printf("Debug: %d unmatched commits remain\n", len(unmatched))
+	}
+	
+	return unmatched
 }
 
 // CommitGroup represents a group of related commits

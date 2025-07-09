@@ -129,6 +129,13 @@ func (p *PickCmd) Run(ctx *kong.Context, globals *CLI) error {
 	}
 
 	userCommits := git.FilterCommitsByAuthor(prdCommits, currentUser)
+	
+	if p.Debug {
+		fmt.Printf("Debug: Found %d commits from user %s in PRD:\n", len(userCommits), currentUser)
+		for i, commit := range userCommits {
+			fmt.Printf("  %d. %s - %s - %s\n", i+1, commit.Hash, commit.Date, commit.Message)
+		}
+	}
 
 	// Apply date filtering
 	var filteredCommits []git.Commit
@@ -166,7 +173,7 @@ func (p *PickCmd) Run(ctx *kong.Context, globals *CLI) error {
 	}
 
 	// Find commits that haven't been picked yet
-	unpickedCommits := picker.FilterUnpickedCommits(filteredCommits, hmlCommits)
+	unpickedCommits := picker.FilterUnpickedCommits(filteredCommits, hmlCommits, p.Debug)
 
 	if len(unpickedCommits) == 0 {
 		fmt.Println("All commits have already been picked to HML branch.")
