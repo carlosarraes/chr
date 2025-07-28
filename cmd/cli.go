@@ -41,6 +41,7 @@ type PickCmd struct {
 	Continue    bool   `kong:"help='Continue cherry-picking after resolving conflicts'"`
 	Debug       bool   `kong:"short='d',help='Show debug output'"`
 	NoFilter    bool   `kong:"help='Disable smart filtering - show latest N commits without deduplication'"`
+	Reverse     bool   `kong:"short='r',help='Reverse direction: pick from HML to PRD instead of PRD to HML'"`
 }
 
 // ConfigCmd represents the config subcommand
@@ -88,9 +89,20 @@ func (p *PickCmd) Run(ctx *kong.Context, globals *CLI) error {
 	prdBranch := cfg.Prefix + cardNumber + cfg.SuffixPrd
 	hmlBranch := cfg.Prefix + cardNumber + cfg.SuffixHml
 
-	fmt.Printf("Current branch: %s\n", currentBranch)
-	fmt.Printf("PRD branch: %s\n", prdBranch)
-	fmt.Printf("HML branch: %s\n", hmlBranch)
+	var sourceBranch, targetBranch string
+	if p.Reverse {
+		sourceBranch = hmlBranch
+		targetBranch = prdBranch
+		fmt.Printf("Current branch: %s\n", currentBranch)
+		fmt.Printf("Source (HML) branch: %s\n", sourceBranch)
+		fmt.Printf("Target (PRD) branch: %s\n", targetBranch)
+	} else {
+		sourceBranch = prdBranch
+		targetBranch = hmlBranch
+		fmt.Printf("Current branch: %s\n", currentBranch)
+		fmt.Printf("Source (PRD) branch: %s\n", sourceBranch)
+		fmt.Printf("Target (HML) branch: %s\n", targetBranch)
+	}
 
 	// Check if branches exist
 	if exists, err := git.BranchExists(repoDir, prdBranch); err != nil {
@@ -105,21 +117,20 @@ func (p *PickCmd) Run(ctx *kong.Context, globals *CLI) error {
 		return fmt.Errorf("HML branch '%s' does not exist", hmlBranch)
 	}
 
-	prdCommitLimit := 100
+	commitLimit := 100
 	if p.Latest {
-		prdCommitLimit = 20
+		commitLimit = 20
 	} else if p.Show {
-		prdCommitLimit = 0
+		commitLimit = 0
 	}
 
-	// Get commits from PRD branch
-	prdCommits, err := git.GetCommits(repoDir, hmlBranch, prdBranch, prdCommitLimit, p.Debug)
+	sourceCommits, err := git.GetCommits(repoDir, targetBranch, sourceBranch, commitLimit, p.Debug)
 	if err != nil {
-		return fmt.Errorf("failed to get PRD commits: %w", err)
+		return fmt.Errorf("failed to get source commits: %w", err)
 	}
 
-	if len(prdCommits) == 0 {
-		fmt.Println("No new commits found in PRD branch.")
+	if len(sourceCommits) == 0 {
+		fmt.Printf("No new commits found in %s branch.\n", sourceBranch)
 		return nil
 	}
 
@@ -129,10 +140,10 @@ func (p *PickCmd) Run(ctx *kong.Context, globals *CLI) error {
 		return fmt.Errorf("failed to get current user: %w", err)
 	}
 
-	userCommits := git.FilterCommitsByAuthor(prdCommits, currentUser)
+	userCommits := git.FilterCommitsByAuthor(sourceCommits, currentUser)
 	
 	if p.Debug {
-		fmt.Printf("Debug: Found %d commits from user %s in PRD:\n", len(userCommits), currentUser)
+		fmt.Printf("Debug: Found %d commits from user %s in %s:\n", len(userCommits), currentUser, sourceBranch)
 		for i, commit := range userCommits {
 			fmt.Printf("  %d. %s - %s - %s\n", i+1, commit.Hash, commit.Date, commit.Message)
 		}
@@ -174,16 +185,16 @@ func (p *PickCmd) Run(ctx *kong.Context, globals *CLI) error {
 			fmt.Printf("Debug: Using --no-filter, skipping smart deduplication\n")
 		}
 	} else {
-		hmlCommits, err := git.GetCommits(repoDir, "main", hmlBranch, 100, p.Debug)
+		targetCommits, err := git.GetCommits(repoDir, "main", targetBranch, 100, p.Debug)
 		if err != nil {
-			return fmt.Errorf("failed to get HML commits: %w", err)
+			return fmt.Errorf("failed to get target commits: %w", err)
 		}
 
-		unpickedCommits = picker.FilterUnpickedCommits(filteredCommits, hmlCommits, p.Debug)
+		unpickedCommits = picker.FilterUnpickedCommits(filteredCommits, targetCommits, p.Debug)
 	}
 
 	if len(unpickedCommits) == 0 {
-		fmt.Println("All commits have already been picked to HML branch.")
+		fmt.Printf("All commits have already been picked to %s branch.\n", targetBranch)
 		return nil
 	}
 
@@ -287,7 +298,7 @@ func (c *ConfigCmd) Run(ctx *kong.Context, globals *CLI) error {
 }
 
 func (v *VersionCmd) Run(ctx *kong.Context, globals *CLI) error {
-	fmt.Println("chr version 0.1.2")
+	fmt.Println("chr version 0.1.3")
 	return nil
 }
 
@@ -301,7 +312,7 @@ func validateDate(dateStr string) error {
 func (cli *CLI) BeforeApply(ctx *kong.Context) error {
 	// Handle version flag
 	if cli.VersionFlag {
-		fmt.Println("chr version 0.1.2")
+		fmt.Println("chr version 0.1.3")
 		os.Exit(0)
 	}
 
@@ -325,7 +336,7 @@ func ExecuteCLI(args []string) error {
 
 	parser, err := kong.New(&cli,
 		kong.Name("chr"),
-		kong.Description("Git commit manager for cherry-picking between production and homologation branches\n\nUsage: chr pick [flags]  # Cherry-pick commits (default)\n       chr pick --show   # Show commits (dry run)\n       chr config        # Manage configuration"),
+		kong.Description("Git commit manager for cherry-picking between production and homologation branches\n\nUsage: chr pick [flags]         # Cherry-pick PRD to HML (default)\n       chr pick --reverse       # Cherry-pick HML to PRD\n       chr pick --show          # Show commits (dry run)\n       chr config               # Manage configuration"),
 		kong.UsageOnError(),
 		kong.ConfigureHelp(kong.HelpOptions{
 			Compact: true,
