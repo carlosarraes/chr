@@ -42,6 +42,9 @@ type PickCmd struct {
 	Debug       bool   `kong:"short='d',help='Show debug output'"`
 	NoFilter    bool   `kong:"help='Disable smart filtering - show latest N commits without deduplication'"`
 	Reverse     bool   `kong:"short='r',help='Reverse direction: pick from HML to PRD instead of PRD to HML'"`
+	Prefix      string `kong:"help='Override branch prefix (e.g., ZUP-)'"`
+	SuffixPrd   string `kong:"help='Override production branch suffix (e.g., -prd)'"`
+	SuffixHml   string `kong:"help='Override homologation branch suffix (e.g., -hml)'"`
 }
 
 // ConfigCmd represents the config subcommand
@@ -62,6 +65,16 @@ func (p *PickCmd) Run(ctx *kong.Context, globals *CLI) error {
 	cfg, err := loadConfig()
 	if err != nil {
 		return fmt.Errorf("failed to load config: %w", err)
+	}
+
+	if p.Prefix != "" {
+		cfg.Prefix = p.Prefix
+	}
+	if p.SuffixPrd != "" {
+		cfg.SuffixPrd = p.SuffixPrd
+	}
+	if p.SuffixHml != "" {
+		cfg.SuffixHml = p.SuffixHml
 	}
 
 	// Setup colors - global flag overrides config
