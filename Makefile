@@ -6,7 +6,7 @@
 
 # Build configuration
 BINARY_NAME := chr
-VERSION := 0.1.3
+VERSION := 0.1.4
 BUILD_DIR := dist
 MAIN_PATH := .
 
