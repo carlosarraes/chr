@@ -79,15 +79,34 @@ func (p *PickCmd) Run(ctx *kong.Context, globals *CLI) error {
 		return fmt.Errorf("failed to get current branch: %w", err)
 	}
 
-	// Parse branch name to get card number
-	cardNumber, err := git.ParseBranchName(currentBranch, cfg.Prefix)
+	var currentSuffix string
+	if strings.HasSuffix(currentBranch, cfg.SuffixPrd) {
+		currentSuffix = cfg.SuffixPrd
+	} else if strings.HasSuffix(currentBranch, cfg.SuffixHml) {
+		currentSuffix = cfg.SuffixHml
+	} else {
+		return fmt.Errorf("current branch '%s' doesn't end with PRD suffix '%s' or HML suffix '%s'", currentBranch, cfg.SuffixPrd, cfg.SuffixHml)
+	}
+
+	branchIdentifier, err := git.ParseBranchName(currentBranch, cfg.Prefix, currentSuffix)
 	if err != nil {
 		return fmt.Errorf("failed to parse branch name: %w", err)
 	}
 
-	// Construct PRD and HML branch names
-	prdBranch := cfg.Prefix + cardNumber + cfg.SuffixPrd
-	hmlBranch := cfg.Prefix + cardNumber + cfg.SuffixHml
+	prdBranch := cfg.Prefix + branchIdentifier + cfg.SuffixPrd
+	hmlBranch := cfg.Prefix + branchIdentifier + cfg.SuffixHml
+
+	if exists, err := git.BranchExists(repoDir, prdBranch); err != nil {
+		return fmt.Errorf("failed to check PRD branch: %w", err)
+	} else if !exists {
+		return fmt.Errorf("PRD branch '%s' does not exist", prdBranch)
+	}
+
+	if exists, err := git.BranchExists(repoDir, hmlBranch); err != nil {
+		return fmt.Errorf("failed to check HML branch: %w", err)
+	} else if !exists {
+		return fmt.Errorf("HML branch '%s' does not exist", hmlBranch)
+	}
 
 	var sourceBranch, targetBranch string
 	if p.Reverse {
@@ -102,19 +121,6 @@ func (p *PickCmd) Run(ctx *kong.Context, globals *CLI) error {
 		fmt.Printf("Current branch: %s\n", currentBranch)
 		fmt.Printf("Source (PRD) branch: %s\n", sourceBranch)
 		fmt.Printf("Target (HML) branch: %s\n", targetBranch)
-	}
-
-	// Check if branches exist
-	if exists, err := git.BranchExists(repoDir, prdBranch); err != nil {
-		return fmt.Errorf("failed to check PRD branch: %w", err)
-	} else if !exists {
-		return fmt.Errorf("PRD branch '%s' does not exist", prdBranch)
-	}
-
-	if exists, err := git.BranchExists(repoDir, hmlBranch); err != nil {
-		return fmt.Errorf("failed to check HML branch: %w", err)
-	} else if !exists {
-		return fmt.Errorf("HML branch '%s' does not exist", hmlBranch)
 	}
 
 	commitLimit := 100

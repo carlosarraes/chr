@@ -268,6 +268,155 @@ func TestFilterCommitsByDate(t *testing.T) {
 	}
 }
 
+func TestParseBranchName(t *testing.T) {
+	tests := []struct {
+		name           string
+		branchName     string
+		prefix         string
+		suffix         string
+		expectedResult string
+		expectError    bool
+	}{
+		{
+			name:           "simple branch with card number",
+			branchName:     "ZUP-123-prd",
+			prefix:         "ZUP-",
+			suffix:         "-prd",
+			expectedResult: "123",
+			expectError:    false,
+		},
+		{
+			name:           "branch with middle content",
+			branchName:     "ZGR-72-v-2-implementacao-do-design-system-prd",
+			prefix:         "ZGR-",
+			suffix:         "-prd",
+			expectedResult: "72-v-2-implementacao-do-design-system",
+			expectError:    false,
+		},
+		{
+			name:           "branch with different suffix",
+			branchName:     "ZGR-72-v-2-implementacao-do-design-system-hml",
+			prefix:         "ZGR-",
+			suffix:         "-hml",
+			expectedResult: "72-v-2-implementacao-do-design-system",
+			expectError:    false,
+		},
+		{
+			name:           "branch without correct prefix",
+			branchName:     "WRONG-123-prd",
+			prefix:         "ZUP-",
+			suffix:         "-prd",
+			expectedResult: "",
+			expectError:    true,
+		},
+		{
+			name:           "branch without correct suffix",
+			branchName:     "ZUP-123-wrong",
+			prefix:         "ZUP-",
+			suffix:         "-prd",
+			expectedResult: "",
+			expectError:    true,
+		},
+		{
+			name:           "branch with only prefix and suffix",
+			branchName:     "ZUP--prd",
+			prefix:         "ZUP-",
+			suffix:         "-prd",
+			expectedResult: "",
+			expectError:    true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := ParseBranchName(tt.branchName, tt.prefix, tt.suffix)
+
+			if tt.expectError {
+				if err == nil {
+					t.Errorf("Expected error but got none")
+				}
+				return
+			}
+
+			if err != nil {
+				t.Errorf("Unexpected error: %v", err)
+				return
+			}
+
+			if result != tt.expectedResult {
+				t.Errorf("Expected result %q, got %q", tt.expectedResult, result)
+			}
+		})
+	}
+}
+
+func TestFindBranchByPattern(t *testing.T) {
+	repoDir := setupTestRepo(t)
+
+	createTestCommit(t, repoDir, "ZUP-123-feature-prd", "commit 1")
+	createTestCommit(t, repoDir, "ZUP-123-feature-hml", "commit 2")
+	createTestCommit(t, repoDir, "ZUP-456-prd", "commit 3")
+
+	tests := []struct {
+		name           string
+		pattern        string
+		expectedBranch string
+		expectError    bool
+		errorContains  string
+	}{
+		{
+			name:           "find single matching branch",
+			pattern:        "ZUP-123-feature-prd",
+			expectedBranch: "ZUP-123-feature-prd",
+			expectError:    false,
+		},
+		{
+			name:           "find with wildcard pattern",
+			pattern:        "ZUP-456*",
+			expectedBranch: "ZUP-456-prd",
+			expectError:    false,
+		},
+		{
+			name:          "no matching branches",
+			pattern:       "ZUP-999-*",
+			expectError:   true,
+			errorContains: "no branches found",
+		},
+		{
+			name:          "multiple matching branches",
+			pattern:       "ZUP-123-feature-*",
+			expectError:   true,
+			errorContains: "multiple branches found",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			branch, err := FindBranchByPattern(repoDir, tt.pattern)
+
+			if tt.expectError {
+				if err == nil {
+					t.Errorf("Expected error but got none")
+					return
+				}
+				if tt.errorContains != "" && !strings.Contains(err.Error(), tt.errorContains) {
+					t.Errorf("Expected error to contain %q, got: %v", tt.errorContains, err)
+				}
+				return
+			}
+
+			if err != nil {
+				t.Errorf("Unexpected error: %v", err)
+				return
+			}
+
+			if branch != tt.expectedBranch {
+				t.Errorf("Expected branch %q, got %q", tt.expectedBranch, branch)
+			}
+		})
+	}
+}
+
 func TestCherryPickCommits(t *testing.T) {
 	repoDir := setupTestRepo(t)
 

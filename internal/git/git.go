@@ -3,7 +3,6 @@ package git
 import (
 	"fmt"
 	"os/exec"
-	"strconv"
 	"strings"
 	"time"
 )
@@ -327,30 +326,48 @@ func (c Commit) Signature() string {
 	return fmt.Sprintf("%s:%s:%s", c.Author, c.Date, strings.Split(c.Message, "\n")[0])
 }
 
-// ParseBranchName extracts card number from branch name using the given prefix and suffix
-func ParseBranchName(branchName, prefix string) (string, error) {
+func ParseBranchName(branchName, prefix, suffix string) (string, error) {
 	if !strings.HasPrefix(branchName, prefix) {
 		return "", fmt.Errorf("branch '%s' doesn't start with prefix '%s'", branchName, prefix)
 	}
 
-	// Remove prefix and extract card number (everything until first suffix or end)
-	withoutPrefix := strings.TrimPrefix(branchName, prefix)
-	parts := strings.Split(withoutPrefix, "-")
-	if len(parts) == 0 {
-		return "", fmt.Errorf("no card number found in branch name '%s'", branchName)
+	if !strings.HasSuffix(branchName, suffix) {
+		return "", fmt.Errorf("branch '%s' doesn't end with suffix '%s'", branchName, suffix)
 	}
 
-	// First part should be the card number
-	cardNumber := parts[0]
-	if cardNumber == "" {
-		return "", fmt.Errorf("empty card number in branch name '%s'", branchName)
+	branchIdentifier := strings.TrimPrefix(branchName, prefix)
+	branchIdentifier = strings.TrimSuffix(branchIdentifier, suffix)
+
+	if branchIdentifier == "" {
+		return "", fmt.Errorf("empty branch identifier in branch name '%s'", branchName)
 	}
 
-	// Validate that it's numeric (optional - depends on your naming convention)
-	if _, err := strconv.Atoi(cardNumber); err != nil {
-		// If it's not numeric, just return it as-is
-		// This allows for non-numeric card numbers like "FEAT-123"
+	return branchIdentifier, nil
+}
+
+func FindBranchByPattern(repoDir, pattern string) (string, error) {
+	cmd := exec.Command("git", "for-each-ref", "--format=%(refname:short)", fmt.Sprintf("refs/heads/%s", pattern))
+	cmd.Dir = repoDir
+	output, err := cmd.Output()
+	if err != nil {
+		return "", fmt.Errorf("failed to search for branches matching pattern '%s': %w", pattern, err)
 	}
 
-	return cardNumber, nil
+	lines := strings.Split(strings.TrimSpace(string(output)), "\n")
+	var matches []string
+	for _, line := range lines {
+		if line != "" {
+			matches = append(matches, line)
+		}
+	}
+
+	if len(matches) == 0 {
+		return "", fmt.Errorf("no branches found matching pattern '%s'", pattern)
+	}
+
+	if len(matches) > 1 {
+		return "", fmt.Errorf("multiple branches found matching pattern '%s': %v", pattern, matches)
+	}
+
+	return matches[0], nil
 }
